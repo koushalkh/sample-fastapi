@@ -28,6 +28,31 @@ class Settings:
     def port(self):
         return 8000
     
+    # Graph API Configuration
+    @property
+    def graph_api_endpoint(self):
+        return os.environ.get("GRAPH_API_ENDPOINT", "https://graph.microsoft.com/v1.0")
+    
+    @property
+    def tenant_id(self):
+        return os.environ.get("GRAPH_API_TENANT_ID")
+    
+    @property
+    def client_id(self):
+        return os.environ.get("GRAPH_API_CLIENT_ID")
+    
+    @property
+    def client_secret(self):
+        return os.environ.get("GRAPH_API_CLIENT_SECRET")
+    
+    @property
+    def graph_api_scopes(self):
+        default_scopes = ["https://graph.microsoft.com/.default"]
+        scopes_env = os.environ.get("GRAPH_API_GRAPH_API_SCOPES")
+        if scopes_env:
+            return scopes_env.split(",")
+        return default_scopes
+
 
 try:
     settings = Settings()
