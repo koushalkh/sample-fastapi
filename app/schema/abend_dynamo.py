@@ -24,7 +24,7 @@ class AbendTypeIndex(GlobalSecondaryIndex):
         projection = AllProjection()
 
     abend_type = UnicodeAttribute(hash_key=True)
-    abended_at = UnicodeAttribute(range_key=True)
+    abended_at = UnicodeAttribute(range_key=True)  # Keep as string for GSI sorting
 
 
 class JobNameIndex(GlobalSecondaryIndex):
@@ -35,7 +35,7 @@ class JobNameIndex(GlobalSecondaryIndex):
         projection = AllProjection()
 
     job_name = UnicodeAttribute(hash_key=True)
-    abended_at = UnicodeAttribute(range_key=True)
+    abended_at = UnicodeAttribute(range_key=True)  # Keep as string for GSI sorting
 
 
 class DomainAreaIndex(GlobalSecondaryIndex):
@@ -46,7 +46,7 @@ class DomainAreaIndex(GlobalSecondaryIndex):
         projection = AllProjection()
 
     domain_area = UnicodeAttribute(hash_key=True)
-    abended_at = UnicodeAttribute(range_key=True)
+    abended_at = UnicodeAttribute(range_key=True)  # Keep as string for GSI sorting
 
 
 class AbendActionStatusIndex(GlobalSecondaryIndex):
@@ -57,7 +57,7 @@ class AbendActionStatusIndex(GlobalSecondaryIndex):
         projection = AllProjection()
 
     abend_action_status = UnicodeAttribute(hash_key=True)
-    abended_at = UnicodeAttribute(range_key=True)
+    abended_at = UnicodeAttribute(range_key=True)  # Keep as string for GSI sorting
 
 
 class AbendDynamoTable(Model):
@@ -66,13 +66,18 @@ class AbendDynamoTable(Model):
 
     Primary Key:
     - tracking_id (hash key): Unique identifier for the ABEND record
-    - abended_at (range key): Timestamp when the abend occurred
+    - abended_at (range key): UTC datetime when the abend occurred
 
     Global Secondary Indexes:
-    - AbendTypeIndex: Query by abend_type + abended_at
-    - JobNameIndex: Query by job_name + abended_at
-    - DomainAreaIndex: Query by domain_area + abended_at
-    - AbendActionStatusIndex: Query by abend_action_status + abended_at
+    - AbendTypeIndex: Query by abend_type + abended_at (as ISO string)
+    - JobNameIndex: Query by job_name + abended_at (as ISO string)
+    - DomainAreaIndex: Query by domain_area + abended_at (as ISO string)
+    - AbendActionStatusIndex: Query by abend_action_status + abended_at (as ISO string)
+    
+    Note: The abended_at field is stored as UTCDateTimeAttribute in the main table
+    but converted to ISO 8601 string format for GSI range key queries.
+    Use the helper methods datetime_to_iso_string() and iso_string_to_datetime()
+    for conversion between formats when querying GSIs.
     """
 
     class Meta:
@@ -92,7 +97,7 @@ class AbendDynamoTable(Model):
 
     # Primary Key
     tracking_id = UnicodeAttribute(hash_key=True, attr_name="trackingID")
-    abended_at = UnicodeAttribute(range_key=True, attr_name="abendedAt")
+    abended_at = UTCDateTimeAttribute(range_key=True, attr_name="abendedAt")
 
     # Attributes for Global Secondary Indexes
     abend_type = UnicodeAttribute(attr_name="abendType", null=True)
@@ -118,3 +123,43 @@ class AbendDynamoTable(Model):
         """Override save to update the updated_at timestamp."""
         self.updated_at = datetime.now(timezone.utc)
         return super().save(condition=condition, **kwargs)
+
+    @property
+    def abended_at_iso(self) -> str:
+        """
+        Get the abended_at datetime as ISO 8601 string for GSI queries.
+        
+        Returns:
+            ISO 8601 formatted datetime string (YYYY-MM-DDTHH:MM:SS.fffffZ)
+        """
+        if self.abended_at:
+            return self.abended_at.isoformat()
+        return ""
+    
+    @classmethod
+    def datetime_to_iso_string(cls, dt: datetime) -> str:
+        """
+        Convert datetime to ISO 8601 string format for GSI queries.
+        
+        Args:
+            dt: datetime object to convert
+            
+        Returns:
+            ISO 8601 formatted datetime string
+        """
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+    
+    @classmethod
+    def iso_string_to_datetime(cls, iso_string: str) -> datetime:
+        """
+        Convert ISO 8601 string to datetime object.
+        
+        Args:
+            iso_string: ISO 8601 formatted datetime string
+            
+        Returns:
+            datetime object
+        """
+        return datetime.fromisoformat(iso_string.replace('Z', '+00:00'))
