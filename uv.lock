@@ -15,6 +15,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pynamodb" },
     { name = "structlog" },
+    { name = "ulid" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -59,6 +60,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.5.0,<3.0.0" },
     { name = "pynamodb", specifier = ">=6.0.0,<7.0.0" },
     { name = "structlog", specifier = ">=23.2.0,<25.0.0" },
+    { name = "ulid", specifier = ">=1.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.24.0,<1.0.0" },
 ]
 
@@ -1606,6 +1608,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/f8/b1/0c11f5058406b3af7
 wheels = [
     { url = "https://files.pythonhosted.org/packages/17/69/cd203477f944c353c31bade965f880aa1061fd6bf05ded0726ca845b6ff7/typing_inspection-0.4.1-py3-none-any.whl", hash = "sha256:389055682238f53b04f7badcb49b989835495a96700ced5dab2d8feae4b26f51", size = 14552, upload-time = "2025-05-21T18:55:22.152Z" },
 ]
+
+[[package]]
+name = "ulid"
+version = "1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/56/d4/6829692e4902d53684b7696cf3d5158f07439ebc4bc3ca7822b5ca173e44/ulid-1.1.tar.gz", hash = "sha256:0943e8a751ec10dfcdb4df2758f96dffbbfbc055d0b49288caf2f92125900d49", size = 1174, upload-time = "2016-08-01T23:00:12.792Z" }
 
 [[package]]
 name = "urllib3"

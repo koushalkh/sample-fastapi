@@ -5,8 +5,11 @@ Based on Terraform configuration for adr-abend-dynamodb table.
 
 from datetime import datetime, timezone
 from typing import Any, Dict
+import ulid
 
 from pynamodb.attributes import (
+    JSONAttribute,
+    NumberAttribute,
     UnicodeAttribute,
     UTCDateTimeAttribute,
 )
@@ -22,6 +25,8 @@ class AbendTypeIndex(GlobalSecondaryIndex):
     class Meta:
         index_name = "AbendTypeIndex"
         projection = AllProjection()
+        read_capacity_units = 2
+        write_capacity_units = 2
 
     abend_type = UnicodeAttribute(hash_key=True)
     abended_at = UnicodeAttribute(range_key=True)  # Keep as string for GSI sorting
@@ -33,6 +38,8 @@ class JobNameIndex(GlobalSecondaryIndex):
     class Meta:
         index_name = "JobNameIndex"
         projection = AllProjection()
+        read_capacity_units = 2
+        write_capacity_units = 2
 
     job_name = UnicodeAttribute(hash_key=True)
     abended_at = UnicodeAttribute(range_key=True)  # Keep as string for GSI sorting
@@ -44,19 +51,36 @@ class DomainAreaIndex(GlobalSecondaryIndex):
     class Meta:
         index_name = "DomainAreaIndex"
         projection = AllProjection()
+        read_capacity_units = 2
+        write_capacity_units = 2
 
     domain_area = UnicodeAttribute(hash_key=True)
     abended_at = UnicodeAttribute(range_key=True)  # Keep as string for GSI sorting
 
 
-class AbendActionStatusIndex(GlobalSecondaryIndex):
-    """Global Secondary Index for querying by abend action status."""
+class ADRStatusIndex(GlobalSecondaryIndex):
+    """Global Secondary Index for querying by ADR status."""
 
     class Meta:
-        index_name = "AbendActionStatusIndex"
+        index_name = "ADRStatusIndex"
         projection = AllProjection()
+        read_capacity_units = 2
+        write_capacity_units = 2
 
-    abend_action_status = UnicodeAttribute(hash_key=True)
+    adr_status = UnicodeAttribute(hash_key=True)
+    abended_at = UnicodeAttribute(range_key=True)  # Keep as string for GSI sorting
+
+
+class SeverityIndex(GlobalSecondaryIndex):
+    """Global Secondary Index for querying by severity level."""
+
+    class Meta:
+        index_name = "SeverityIndex"
+        projection = AllProjection()
+        read_capacity_units = 2
+        write_capacity_units = 2
+
+    severity = UnicodeAttribute(hash_key=True)
     abended_at = UnicodeAttribute(range_key=True)  # Keep as string for GSI sorting
 
 
@@ -72,7 +96,8 @@ class AbendDynamoTable(Model):
     - AbendTypeIndex: Query by abend_type + abended_at (as ISO string)
     - JobNameIndex: Query by job_name + abended_at (as ISO string)
     - DomainAreaIndex: Query by domain_area + abended_at (as ISO string)
-    - AbendActionStatusIndex: Query by abend_action_status + abended_at (as ISO string)
+    - ADRStatusIndex: Query by adr_status + abended_at (as ISO string)
+    - SeverityIndex: Query by severity + abended_at (as ISO string)
     
     Note: The abended_at field is stored as UTCDateTimeAttribute in the main table
     but converted to ISO 8601 string format for GSI range key queries.
@@ -99,19 +124,52 @@ class AbendDynamoTable(Model):
     tracking_id = UnicodeAttribute(hash_key=True, attr_name="trackingID")
     abended_at = UTCDateTimeAttribute(range_key=True, attr_name="abendedAt")
 
-    # Attributes for Global Secondary Indexes
-    abend_type = UnicodeAttribute(attr_name="abendType", null=True)
+    # Basic job information
+    job_id = UnicodeAttribute(attr_name="jobID")
     job_name = UnicodeAttribute(attr_name="jobName", null=True)
+    order_id = UnicodeAttribute(attr_name="orderID", null=True)
+    incident_number = UnicodeAttribute(attr_name="incidentNumber", null=True)
+    fa_id = UnicodeAttribute(attr_name="faID", null=True)
     domain_area = UnicodeAttribute(attr_name="domainArea", null=True)
-    abend_action_status = UnicodeAttribute(attr_name="abendActionStatus", null=True)
+
+    # ABEND specific information
+    abend_type = UnicodeAttribute(attr_name="abendType", null=True)
+    abend_step = UnicodeAttribute(attr_name="abendStep", null=True)
+    abend_return_code = UnicodeAttribute(attr_name="abendReturnCode", null=True)
+    abend_reason = UnicodeAttribute(attr_name="abendReason", null=True)
+    
+    # Status and severity (used for GSI)
+    adr_status = UnicodeAttribute(attr_name="adrStatus")
+    severity = UnicodeAttribute(attr_name="severity")
+
+    # Performance metrics (flattened)
+    perf_log_extraction_time = UnicodeAttribute(attr_name="perfLogExtractionTime", null=True)
+    perf_ai_analysis_time = UnicodeAttribute(attr_name="perfAiAnalysisTime", null=True)
+    perf_remediation_time = UnicodeAttribute(attr_name="perfRemediationTime", null=True)
+    perf_total_automated_time = UnicodeAttribute(attr_name="perfTotalAutomatedTime", null=True)
+
+    # Log extraction metadata (flattened)
+    log_extraction_run_id = UnicodeAttribute(attr_name="logExtractionRunId", null=True)
+    log_extraction_retries = NumberAttribute(attr_name="logExtractionRetries", default=0)
+
+    # Complex nested objects stored as JSON
+    email_metadata = JSONAttribute(attr_name="emailMetadata", null=True)
+    knowledge_base_metadata = JSONAttribute(attr_name="knowledgeBaseMetadata", null=True)
+    remediation_metadata = JSONAttribute(attr_name="remediationMetadata", null=True)
+
+    # Audit fields
+    created_by = UnicodeAttribute(attr_name="createdBy", default="system")
+    updated_by = UnicodeAttribute(attr_name="updatedBy", default="system")
+    generation = NumberAttribute(attr_name="generation", default=1)
 
     # Global Secondary Indexes
     abend_type_index = AbendTypeIndex()
     job_name_index = JobNameIndex()
     domain_area_index = DomainAreaIndex()
-    abend_action_status_index = AbendActionStatusIndex()
+    adr_status_index = ADRStatusIndex()
+    severity_index = SeverityIndex()
 
-    # Additional fields (to be expanded later)
+    # Timestamp fields
     created_at = UTCDateTimeAttribute(
         default=lambda: datetime.now(timezone.utc), attr_name="createdAt"
     )
@@ -163,3 +221,47 @@ class AbendDynamoTable(Model):
             datetime object
         """
         return datetime.fromisoformat(iso_string.replace('Z', '+00:00'))
+    
+    @classmethod
+    def generate_tracking_id(cls, job_name: str) -> str:
+        """
+        Generate tracking ID using the format: ABEND_{jobname}_{ulid}
+        
+        Args:
+            job_name: Name of the job that abended
+            
+        Returns:
+            Formatted tracking ID with auto-generated ULID
+            
+        Example:
+            >>> AbendDynamoTable.generate_tracking_id("WGMP110D")
+            "ABEND_WGMP110D_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+        """
+        return f"ABEND_{job_name}_{ulid.ulid()}"
+    
+    def set_email_metadata(self, email_data: Dict[str, Any]) -> None:
+        """
+        Set email metadata from dictionary.
+        
+        Args:
+            email_data: Dictionary containing email metadata
+        """
+        self.email_metadata = email_data
+    
+    def set_knowledge_base_metadata(self, kb_data: Dict[str, Any]) -> None:
+        """
+        Set knowledge base metadata from dictionary.
+        
+        Args:
+            kb_data: Dictionary containing knowledge base metadata
+        """
+        self.knowledge_base_metadata = kb_data
+    
+    def set_remediation_metadata(self, remediation_data: Dict[str, Any]) -> None:
+        """
+        Set remediation metadata from dictionary.
+        
+        Args:
+            remediation_data: Dictionary containing remediation metadata
+        """
+        self.remediation_metadata = remediation_data
