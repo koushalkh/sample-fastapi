@@ -6,6 +6,7 @@ class SOPItem(BaseModel):
     name: str
     description: str
 
+
 class SOPDetail(BaseModel):
     id: str
     name: str

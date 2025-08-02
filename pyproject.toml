@@ -1,16 +1,291 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-name = "sample"
-version = "0.1.0"
-description = "Add your description here"
+name = "adr-service"
+version = "1.0.0"
+description = "ADR (Abnormal End Records) FastAPI Microservice for managing ABEND records and SOPs"
 readme = "README.md"
-requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "Elevance Health"},
+]
+maintainers = [
+    {name = "Elevance Health"},
+]
+keywords = [
+    "fastapi",
+    "microservice",
+    "abend",
+    "sop",
+    "aws",
+    "dynamodb",
+    "healthcare"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: System :: Monitoring",
+]
+requires-python = ">=3.11"
 dependencies = [
-    "asyncio>=3.4.3",
-    "fastapi[standard]>=0.116.0",
-    "httpx>=0.28.1",
-    "structlog>=25.4.0",
-    "uvicorn>=0.30.0",
+    # Web Framework
+    "fastapi>=0.104.0,<1.0.0",
+    "uvicorn[standard]>=0.24.0,<1.0.0",
+    
+    # Data Validation & Serialization
+    "pydantic>=2.5.0,<3.0.0",
+    
+    # AWS Services
+    "boto3>=1.34.0,<2.0.0",
+    "botocore>=1.34.0,<2.0.0",
+    
+    # Database ORM
+    "pynamodb>=6.0.0,<7.0.0",
+    
+    # Logging
+    "structlog>=23.2.0,<25.0.0",
+    
+    # Production Server
+    "gunicorn>=21.2.0,<23.0.0",
+    
+    # HTTP Client (for health checks, etc.)
+    "httpx>=0.25.0,<1.0.0",
 ]
 
+[dependency-groups]
+dev = [
+    # Testing
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "httpx>=0.25.0",  # For testing FastAPI endpoints
+    
+    # Code Quality
+    "black>=23.9.0",
+    "isort>=5.12.0",
+    "flake8>=6.1.0",
+    "mypy>=1.6.0",
+    "pre-commit>=3.5.0",
+    
+    # Development Tools
+    "ipython>=8.16.0",
+    "ipdb>=0.13.0",
+    
+    # Documentation
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.4.0",
+]
+
+test = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "httpx>=0.25.0",
+    "moto[dynamodb]>=4.2.0",  # For mocking AWS services
+]
+
+production = [
+    "gunicorn>=21.2.0,<23.0.0",
+]
+
+local-dev = [
+    # Local DynamoDB
+    "boto3-stubs[dynamodb]>=1.34.0",
+    "types-boto3>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/koushalkh/sample-fastapi"
+Repository = "https://github.com/koushalkh/sample-fastapi"
+Documentation = "https://github.com/koushalkh/sample-fastapi/docs"
+Issues = "https://github.com/koushalkh/sample-fastapi/issues"
+
 [project.scripts]
-start-app = "app.main:main"
+adr-service = "app.main:app"
+
+[tool.hatch.version]
+path = "app/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+# Development tools configuration
+[tool.black]
+line-length = 88
+target-version = ["py311", "py312"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+src_paths = ["app"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "boto3.*",
+    "botocore.*",
+    "pynamodb.*",
+    "structlog.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "app.schema.*"
+disable_error_code = ["type-arg", "override"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=app",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests", 
+    "e2e: End-to-end tests",
+    "slow: Slow running tests",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "*/tests/*",
+    "*/venv/*",
+    "*/.venv/*",
+    "*/migrations/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "W503", "E501"]
+max-complexity = 10
+select = ["C", "E", "F", "W", "B", "B950"]
+exclude = [
+    ".git",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "build",
+    "dist",
+    "*.egg-info",
+]
+
+# Environment configuration for different deployment scenarios
+[tool.hatch.envs.default]
+dependencies = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "black",
+    "isort",
+    "flake8",
+    "mypy",
+]
+
+[tool.hatch.envs.default.scripts]
+test = "pytest {args:tests}"
+test-cov = "pytest --cov-report=term-missing --cov-config=pyproject.toml --cov=app {args:tests}"
+cov-report = ["test-cov", "coverage html"]
+type-check = "mypy app"
+format = ["black app", "isort app"]
+lint = ["flake8 app", "mypy app"]
+check = ["format", "lint", "test"]
+
+[tool.hatch.envs.production]
+dependencies = [
+    "gunicorn",
+]
+
+[tool.hatch.envs.production.scripts]
+serve = "gunicorn -w 4 -k uvicorn.workers.UvicornH11Worker app.main:app --bind 0.0.0.0:8000"
+serve-dev = "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+# Docker build configuration
+[tool.hatch.build]
+exclude = [
+    "/.github",
+    "/docs",
+    "/tests",
+    "/scripts",
+    "/.venv",
+    "/common",
+    "*.md",
+    ".gitignore",
+    ".python-version",
+]
+
+[tool.pyright]
+reportGeneralTypeIssues = false
+
+# Custom metadata for the ADR service
+[tool.adr-service]
+service_name = "adr-svc"
+api_version = "v1alpha1"
+health_check_path = "/healthz"
+readiness_check_path = "/readyz"
+supported_api_modes = ["UI", "INTERNAL", "ALL"]
+default_port = 8000

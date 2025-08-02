@@ -1,6 +1,6 @@
+from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Optional
-from dataclasses import dataclass
 
 
 class ApiType(str, Enum):
@@ -8,6 +8,7 @@ class ApiType(str, Enum):
     Enum defining the different API types available in the system.
     This helps in categorizing APIs based on their target consumers.
     """
+
     UI = "ui"
     INTERNAL = "internal"
     SYSTEM = "system"  # For system endpoints like healthz, readyz
@@ -26,6 +27,7 @@ class ApiVersion(str, Enum):
     Enum defining the API versions.
     This allows for versioning of APIs and supporting multiple versions simultaneously.
     """
+
     V1ALPHA1 = "v1alpha1"
     # Add future versions here as they are developed
     # V1BETA1 = "v1beta1"
@@ -45,13 +47,14 @@ class Tag:
     Class to represent an API tag with metadata.
     A tag helps in grouping related endpoints together and provides metadata for documentation.
     """
+
     name: str
     description: str
     api_type: ApiType
     api_version: Optional[ApiVersion] = None
     display_name: str = ""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.display_name:
             self.display_name = self.name.title()
 
@@ -81,7 +84,7 @@ INTERNAL_ABEND_V1ALPHA1 = Tag(
     description="Internal ABEND API endpoints (v1alpha1)",
     api_type=ApiType.INTERNAL,
     api_version=ApiVersion.V1ALPHA1,
-    display_name="Internal ABEND API"
+    display_name="Internal ABEND API",
 )
 
 INTERNAL_SOP_V1ALPHA1 = Tag(
@@ -89,7 +92,7 @@ INTERNAL_SOP_V1ALPHA1 = Tag(
     description="Internal SOP API endpoints (v1alpha1)",
     api_type=ApiType.INTERNAL,
     api_version=ApiVersion.V1ALPHA1,
-    display_name="Internal SOP API"
+    display_name="Internal SOP API",
 )
 
 # UI API tags with version v1alpha1
@@ -98,7 +101,7 @@ UI_ABEND_V1ALPHA1 = Tag(
     description="UI ABEND API endpoints (v1alpha1)",
     api_type=ApiType.UI,
     api_version=ApiVersion.V1ALPHA1,
-    display_name="UI ABEND API"
+    display_name="UI ABEND API",
 )
 
 UI_SOP_V1ALPHA1 = Tag(
@@ -106,7 +109,7 @@ UI_SOP_V1ALPHA1 = Tag(
     description="UI SOP API endpoints (v1alpha1)",
     api_type=ApiType.UI,
     api_version=ApiVersion.V1ALPHA1,
-    display_name="UI SOP API"
+    display_name="UI SOP API",
 )
 
 
@@ -117,8 +120,9 @@ ALL_TAGS = [
     INTERNAL_ABEND_V1ALPHA1,
     INTERNAL_SOP_V1ALPHA1,
     UI_ABEND_V1ALPHA1,
-    UI_SOP_V1ALPHA1
+    UI_SOP_V1ALPHA1,
 ]
+
 
 # Helper functions for getting tags by type, version, etc.
 def get_tags_by_type(api_type: ApiType) -> List[Tag]:
@@ -127,23 +131,33 @@ def get_tags_by_type(api_type: ApiType) -> List[Tag]:
     """
     return [tag for tag in ALL_TAGS if tag.api_type == api_type]
 
+
 def get_tags_by_version(api_version: ApiVersion) -> List[Tag]:
     """
     Get all tags of a specific API version.
     """
     return [tag for tag in ALL_TAGS if tag.api_version == api_version]
 
-def get_tags_by_type_and_version(api_type: ApiType, api_version: ApiVersion) -> List[Tag]:
+
+def get_tags_by_type_and_version(
+    api_type: ApiType, api_version: ApiVersion
+) -> List[Tag]:
     """
     Get all tags of a specific API type and version.
     """
-    return [tag for tag in ALL_TAGS if tag.api_type == api_type and tag.api_version == api_version]
+    return [
+        tag
+        for tag in ALL_TAGS
+        if tag.api_type == api_type and tag.api_version == api_version
+    ]
+
 
 def get_tag_names_by_type(api_type: ApiType) -> List[str]:
     """
     Get all tag names of a specific API type.
     """
     return [tag.name for tag in get_tags_by_type(api_type)]
+
 
 def get_tag_dicts_for_openapi() -> List[Dict[str, str]]:
     """

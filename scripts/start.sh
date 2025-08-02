@@ -191,27 +191,32 @@ start_application() {
     local api_mode="${1:-ALL}"
     local port="${2:-8000}"
     
-    print_status "Starting FastAPI application..."
+    print_status "Starting FastAPI application with uvicorn..."
     print_status "API Mode: $api_mode"
     print_status "Port: $port"
+    print_status "Workers: 3"
     
-    # Run the application
+    # Set environment variable for API mode
+    export API_MODE="$api_mode"
+    
+    # Run the application with uvicorn and 3 workers
     if command -v uv &> /dev/null && [[ -f "uv.lock" ]]; then
-        print_status "Using uv to run the application..."
-        uv run python -m app.main --api-mode "$api_mode" &
+        print_status "Using uv to run uvicorn with 3 workers..."
+        export PYTHONPATH=./app
+        uv run uvicorn app.main:app --host 0.0.0.0 --port "$port" --workers 3 &
     elif [[ -d "venv" ]]; then
-        print_status "Using virtual environment to run the application..."
+        print_status "Using virtual environment to run uvicorn with 3 workers..."
         source venv/bin/activate
-        python -m app.main --api-mode "$api_mode" &
+        uvicorn app.main:app --host 0.0.0.0 --port "$port" --workers 3 &
     else
-        print_status "Running with system Python..."
-        python3 -m app.main --api-mode "$api_mode" &
+        print_status "Running uvicorn with system Python and 3 workers..."
+        python3 -m uvicorn app.main:app --host 0.0.0.0 --port "$port" --workers 3 &
     fi
     
     local app_pid=$!
     
     # Wait a moment for the application to start
-    sleep 3
+    sleep 5
     
     # Check if the process is still running
     if ! kill -0 $app_pid 2>/dev/null; then
@@ -224,9 +229,9 @@ start_application() {
     # Perform health check
     health_check "$port"
     
-    print_success "FastAPI application is running!"
-    print_status "Access the application at: http://localhost:$port"
-    print_status "API documentation available at: http://localhost:$port/docs"
+    print_success "FastAPI application is running with 3 workers!"
+    print_status "Access the application at: https://localhost:$port"
+    print_status "API documentation available at: https://localhost:$port/docs"
     print_status "Press Ctrl+C to stop the application"
     
     # Wait for the application process
@@ -236,7 +241,9 @@ start_application() {
 # Cleanup function
 cleanup() {
     print_status "Shutting down application..."
-    # Kill any remaining Python processes running our app
+    # Kill any remaining uvicorn processes running our app
+    pkill -f "uvicorn.*app.main" 2>/dev/null || true
+    # Also kill any Python processes running our app (fallback)
     pkill -f "python.*app.main" 2>/dev/null || true
     print_success "Cleanup complete"
 }
@@ -246,6 +253,8 @@ trap cleanup EXIT INT TERM
 
 # Main execution
 main() {
+    cleanup
+
     print_status "Starting FastAPI Application Setup"
     print_status "=================================="
     
@@ -267,8 +276,12 @@ main() {
                 echo "Usage: $0 [options]"
                 echo "Options:"
                 echo "  --api-mode MODE    Set API mode (default: ALL)"
+                echo "                     Available modes: UI, INTERNAL, ALL"
                 echo "  --port PORT        Set port number (default: 8000)"
                 echo "  --help, -h         Show this help message"
+                echo ""
+                echo "This script starts the FastAPI application using uvicorn with 3 workers"
+                echo "for improved performance and concurrency."
                 exit 0
                 ;;
             *)

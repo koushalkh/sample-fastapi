@@ -1,6 +1,6 @@
 from fastapi import APIRouter
-
 from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
+
 from app.models import generic_responses
 
 router = APIRouter()
@@ -13,7 +13,7 @@ router = APIRouter()
     response_model=generic_responses.Message,
     responses={HTTP_500_INTERNAL_SERVER_ERROR: {"model": generic_responses.Message}},
 )
-def healthz():
+def healthz() -> generic_responses.Message:
     """
     API endpoint for kubelet to verify service liveness
     :return:

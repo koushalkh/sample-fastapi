@@ -5,6 +5,7 @@ class AbendItem(BaseModel):
     abendId: str
     name: str
 
+
 class AbendDetail(BaseModel):
     abendId: str
     name: str

@@ -1,10 +1,13 @@
 import logging
 import sys
+
 import structlog
-from app.core.config import settings
 from structlog.contextvars import merge_contextvars
 
-def setup_logging():
+from app.core.config import settings
+
+
+def setup_logging() -> None:
     logging.basicConfig(
         format="%(message)s",
         stream=sys.stdout,
@@ -13,7 +16,7 @@ def setup_logging():
 
     structlog.configure(
         processors=[
-            merge_contextvars, # This should be first
+            merge_contextvars,  # This should be first
             structlog.stdlib.add_logger_name,
             structlog.stdlib.add_log_level,
             structlog.processors.StackInfoRenderer(),
@@ -32,14 +35,14 @@ def setup_logging():
     formatter_with_context = structlog.stdlib.ProcessorFormatter(
         processor=structlog.processors.JSONRenderer(),
         foreign_pre_chain=[
-            merge_contextvars, # This should be first
+            merge_contextvars,  # This should be first
             structlog.stdlib.add_logger_name,
             structlog.stdlib.add_log_level,
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.TimeStamper(key="@timestamp", fmt="iso"),
             structlog.processors.UnicodeDecoder(),
-        ]
+        ],
     )
 
     # Add context vars to log messages by below loggers

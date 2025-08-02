@@ -1,13 +1,13 @@
 from fastapi import FastAPI
 
-from api.ui_api.v1alpha1 import abend as ui_abend
-from api.ui_api.v1alpha1 import sop as ui_sop
-from api.internal_api.v1alpha1 import abend as internal_abend
-from api.internal_api.v1alpha1 import sop as internal_sop
-from api import healthz, readyz, tags
+from app.api import healthz, readyz, tags
+from app.api.internal_api.v1alpha1 import abend as internal_abend
+from app.api.internal_api.v1alpha1 import sop as internal_sop
+from app.api.ui_api.v1alpha1 import abend as ui_abend
+from app.api.ui_api.v1alpha1 import sop as ui_sop
 
 
-def ui_routers(app: FastAPI):
+def ui_routers(app: FastAPI) -> None:
     app.include_router(
         ui_abend.router,
         prefix="/adr/ui/v1alpha1/abend",
@@ -17,7 +17,8 @@ def ui_routers(app: FastAPI):
         prefix="/adr/ui/v1alpha1/sop",
     )
 
-def internal_routers(app: FastAPI):
+
+def internal_routers(app: FastAPI) -> None:
     app.include_router(
         internal_abend.router,
         prefix="/adr/internal/v1alpha1/abend",
@@ -60,10 +61,11 @@ def internal_routers(app: FastAPI):
 #     ]
 # }
 
-def initialize_api_routes(app: FastAPI, api_mode: str = "all"):
+
+def initialize_api_routes(app: FastAPI, api_mode: str = "all") -> None:
     """
     Include routes based on the API mode.
-    
+
     :param app: FastAPI application instance
     :param api_mode: Mode of API to include routes for (default is "all")
     """

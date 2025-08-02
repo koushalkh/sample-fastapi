@@ -1,6 +1,7 @@
 from fastapi import APIRouter
-from models.sop import SOPItem
-from api import tags
+
+from app.api import tags
+from app.models.sop import SOPItem
 
 # Create the router
 router = APIRouter()
@@ -11,9 +12,9 @@ router = APIRouter()
     summary="List all SOPs",
     description="List all Standard Operating Procedures available in the system.",
     response_model=list[SOPItem],
-    tags=[tags.INTERNAL_SOP_V1ALPHA1.display_name]
+    tags=[tags.INTERNAL_SOP_V1ALPHA1.display_name],
 )
-async def list_sops():
+async def list_sops() -> list[SOPItem]:
     """
     List all SOPs
     """
