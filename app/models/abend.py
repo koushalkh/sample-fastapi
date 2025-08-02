@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class SeverityEnum(str, Enum):
@@ -26,6 +26,12 @@ class ADRStatusEnum(str, Enum):
     PENDING_MANUAL_APPROVAL = "PENDING_MANUAL_APPROVAL"
     VERIFICATION_IN_PROGRESS = "VERIFICATION_IN_PROGRESS"
     RESOLVED = "RESOLVED"
+
+
+class AIRemediationApprovalStatusEnum(str, Enum):
+    """AI Remediation approval status values."""
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
 
 
 class EmailMetadata(BaseModel):
@@ -61,21 +67,21 @@ class RemediationMetadata(BaseModel):
     expandability: Optional[str] = None
     confidence_score: Optional[float] = Field(None, alias="confidenceScore", ge=0.0, le=1.0)
     remediation_recommendations: Optional[str] = Field(None, alias="remediationRecommendations")
-    ai_remediation_approval_status: Optional[str] = Field(None, alias="aiRemediationApprovalStatus")
+    ai_remediation_approval_status: Optional[AIRemediationApprovalStatusEnum] = Field(None, alias="aiRemediationApprovalStatus")
     ai_remediation_approval_required: bool = Field(False, alias="aiRemediationApprovalRequired")
     ai_remediation_comments: Optional[str] = Field(None, alias="aiRemediationComments")
+    ai_remediation_approved_at: Optional[datetime] = Field(None, alias="aiRemediationApprovedAt")
 
 
 class AbendModel(BaseModel):
-    """Basic ABEND model for table display and listing."""
+    """Simplified ABEND model for UI table display and listing."""
     tracking_id: str = Field(..., alias="trackingID")
     job_id: str = Field(..., alias="jobID")
     job_name: str = Field(..., alias="jobName")
-    abended_at: datetime = Field(..., alias="abendedAt")
     adr_status: ADRStatusEnum = Field(..., alias="adrStatus")
     severity: SeverityEnum
+    abended_at: datetime = Field(..., alias="abendedAt")
     domain_area: Optional[str] = Field(None, alias="domainArea")
-    incident_number: Optional[str] = Field(None, alias="incidentNumber")
     created_at: datetime = Field(..., alias="createdAt")
     updated_at: datetime = Field(..., alias="updatedAt")
 
@@ -123,14 +129,98 @@ class AbendDetailsModel(BaseModel):
     generation: int = Field(default=1)
 
 
-# Legacy models for backwards compatibility
-class AbendItem(BaseModel):
-    abendId: str
-    name: str
+# Request Models
+class GetAbendsRequest(BaseModel):
+    """Request model for getting ABEND records with filters and pagination."""
+    # Filters
+    domain_area: Optional[str] = Field(None, alias="domainArea")
+    adr_status: Optional[ADRStatusEnum] = Field(None, alias="adrStatus")
+    severity: Optional[SeverityEnum] = None
+    
+    # Date filters - either single date or range
+    abended_at: Optional[date] = Field(None, alias="abendedAt", description="Filter by specific date")
+    abended_at_start_date: Optional[date] = Field(None, alias="abendedAtStartDate", description="Start date for range filter")
+    abended_at_end_date: Optional[date] = Field(None, alias="abendedAtEndDate", description="End date for range filter")
+    
+    # Search
+    search: Optional[str] = Field(None, description="Search by job name")
+    
+    # Pagination
+    limit: int = Field(default=5, ge=1, le=10, description="Number of records per page (max 10)")
+    offset: int = Field(default=0, ge=0, description="Number of records to skip")
+
+    @field_validator('abended_at_end_date')
+    @classmethod
+    def validate_date_range(cls, v: Optional[date], info) -> Optional[date]:
+        """Ensure end date is not before start date."""
+        if v and info.data.get('abended_at_start_date') and v < info.data['abended_at_start_date']:
+            raise ValueError('End date cannot be before start date')
+        return v
+
+    @field_validator('abended_at')
+    @classmethod
+    def validate_single_date_vs_range(cls, v: Optional[date], info) -> Optional[date]:
+        """Ensure single date and range filters are not used together."""
+        if v and (info.data.get('abended_at_start_date') or info.data.get('abended_at_end_date')):
+            raise ValueError('Cannot use both single date and date range filters')
+        return v
 
 
-class AbendDetail(BaseModel):
-    abendId: str
-    name: str
-    severity: str
-    description: str
+class AIRecommendationApprovalRequest(BaseModel):
+    """Request model for AI recommendation approval."""
+    approval_status: AIRemediationApprovalStatusEnum = Field(..., alias="approvalStatus")
+    comments: Optional[str] = Field(None, description="Approval comments")
+
+
+# Response Models
+class PaginationMeta(BaseModel):
+    """Pagination metadata."""
+    total: int = Field(..., description="Total number of records")
+    limit: int = Field(..., description="Records per page")
+    offset: int = Field(..., description="Records skipped")
+    has_next: bool = Field(..., alias="hasNext", description="Whether there are more records")
+    has_previous: bool = Field(..., alias="hasPrevious", description="Whether there are previous records")
+
+
+class GetAbendsResponse(BaseModel):
+    """Response model for getting ABEND records."""
+    data: List[AbendModel] = Field(..., description="List of ABEND records")
+    meta: PaginationMeta = Field(..., description="Pagination metadata")
+
+
+class AbendDetailsResponse(BaseModel):
+    """Response model for ABEND details."""
+    data: AbendDetailsModel = Field(..., description="Complete ABEND details")
+
+
+class AvailableFiltersResponse(BaseModel):
+    """Response model for available filter values."""
+    domain_areas: List[str] = Field(..., alias="domainAreas", description="Available domain areas")
+    adr_statuses: List[str] = Field(..., alias="adrStatuses", description="Available ADR statuses")
+    severities: List[str] = Field(..., description="Available severity levels")
+
+
+class TodayStatsResponse(BaseModel):
+    """Response model for today's statistics."""
+    active_abends: int = Field(..., alias="activeAbends", description="Number of active ABENDs (not resolved)")
+    manual_intervention_required: int = Field(..., alias="manualInterventionRequired", 
+                                            description="Number of ABENDs requiring manual intervention")
+    resolved_abends: int = Field(..., alias="resolvedAbends", description="Number of resolved ABENDs")
+    total_abends: int = Field(..., alias="totalAbends", description="Total ABENDs for today")
+
+
+class JobLogsResponse(BaseModel):
+    """Response model for job logs from S3."""
+    tracking_id: str = Field(..., alias="trackingID", description="ABEND tracking ID")
+    job_name: str = Field(..., alias="jobName", description="Job name")
+    log_content: str = Field(..., alias="logContent", description="Log file content from S3")
+    file_size: Optional[int] = Field(None, alias="fileSize", description="File size in bytes")
+    last_modified: Optional[datetime] = Field(None, alias="lastModified", description="Last modified timestamp")
+
+
+class AIRecommendationApprovalResponse(BaseModel):
+    """Response model for AI recommendation approval."""
+    tracking_id: str = Field(..., alias="trackingID", description="ABEND tracking ID")
+    approval_status: AIRemediationApprovalStatusEnum = Field(..., alias="approvalStatus")
+    approved_at: datetime = Field(..., alias="approvedAt", description="Approval timestamp")
+    message: str = Field(..., description="Success message")

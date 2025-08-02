@@ -1,7 +1,10 @@
 """
-ABEND (Abnormal End Records) DynamoDB table schema using PynamoDB.
-Based on Terraform configuration for adr-abend-dynamodb table.
+DynamoDB table schema for ABEND (Abnormal End Records).
 """
+
+from datetime import datetime, timezone
+from typing import Dict, Any, Optional
+import ulid
 
 from datetime import datetime, timezone
 from typing import Any, Dict
@@ -28,8 +31,8 @@ class AbendTypeIndex(GlobalSecondaryIndex):
         read_capacity_units = 2
         write_capacity_units = 2
 
-    abend_type = UnicodeAttribute(hash_key=True)
-    abended_at = UnicodeAttribute(range_key=True)  # Keep as string for GSI sorting
+    abendType = UnicodeAttribute(hash_key=True)  # DynamoDB attribute name
+    abendedAtStr = UnicodeAttribute(range_key=True)  # DynamoDB attribute name
 
 
 class JobNameIndex(GlobalSecondaryIndex):
@@ -41,8 +44,8 @@ class JobNameIndex(GlobalSecondaryIndex):
         read_capacity_units = 2
         write_capacity_units = 2
 
-    job_name = UnicodeAttribute(hash_key=True)
-    abended_at = UnicodeAttribute(range_key=True)  # Keep as string for GSI sorting
+    jobName = UnicodeAttribute(hash_key=True)  # DynamoDB attribute name
+    abendedAtStr = UnicodeAttribute(range_key=True)  # DynamoDB attribute name
 
 
 class DomainAreaIndex(GlobalSecondaryIndex):
@@ -54,8 +57,8 @@ class DomainAreaIndex(GlobalSecondaryIndex):
         read_capacity_units = 2
         write_capacity_units = 2
 
-    domain_area = UnicodeAttribute(hash_key=True)
-    abended_at = UnicodeAttribute(range_key=True)  # Keep as string for GSI sorting
+    domainArea = UnicodeAttribute(hash_key=True)  # DynamoDB attribute name
+    abendedAtStr = UnicodeAttribute(range_key=True)  # DynamoDB attribute name
 
 
 class ADRStatusIndex(GlobalSecondaryIndex):
@@ -67,8 +70,8 @@ class ADRStatusIndex(GlobalSecondaryIndex):
         read_capacity_units = 2
         write_capacity_units = 2
 
-    adr_status = UnicodeAttribute(hash_key=True)
-    abended_at = UnicodeAttribute(range_key=True)  # Keep as string for GSI sorting
+    adrStatus = UnicodeAttribute(hash_key=True)  # DynamoDB attribute name
+    abendedAtStr = UnicodeAttribute(range_key=True)  # DynamoDB attribute name
 
 
 class SeverityIndex(GlobalSecondaryIndex):
@@ -80,8 +83,8 @@ class SeverityIndex(GlobalSecondaryIndex):
         read_capacity_units = 2
         write_capacity_units = 2
 
-    severity = UnicodeAttribute(hash_key=True)
-    abended_at = UnicodeAttribute(range_key=True)  # Keep as string for GSI sorting
+    severity = UnicodeAttribute(hash_key=True)  # DynamoDB attribute name
+    abendedAtStr = UnicodeAttribute(range_key=True)  # DynamoDB attribute name
 
 
 class AbendDynamoTable(Model):
@@ -162,6 +165,10 @@ class AbendDynamoTable(Model):
     updated_by = UnicodeAttribute(attr_name="updatedBy", default="system")
     generation = NumberAttribute(attr_name="generation", default=1)
 
+    # GSI attributes - These need to match the GSI definitions
+    # Note: abended_at is stored as ISO string for GSI range keys
+    abended_at_str = UnicodeAttribute(attr_name="abendedAtStr", null=True)
+
     # Global Secondary Indexes
     abend_type_index = AbendTypeIndex()
     job_name_index = JobNameIndex()
@@ -178,8 +185,13 @@ class AbendDynamoTable(Model):
     )
 
     def save(self, condition: Any = None, **kwargs: Any) -> Dict[str, Any]:
-        """Override save to update the updated_at timestamp."""
+        """Override save to update the updated_at timestamp and GSI attributes."""
         self.updated_at = datetime.now(timezone.utc)
+        
+        # Populate GSI attribute for string-based range key
+        if self.abended_at:
+            self.abended_at_str = self.abended_at.isoformat()
+        
         return super().save(condition=condition, **kwargs)
 
     @property
@@ -248,6 +260,15 @@ class AbendDynamoTable(Model):
         """
         self.email_metadata = email_data
     
+    def get_email_metadata(self) -> Optional[Dict[str, Any]]:
+        """
+        Get email metadata as dictionary.
+        
+        Returns:
+            Dictionary containing email metadata or None if not set
+        """
+        return self.email_metadata
+    
     def set_knowledge_base_metadata(self, kb_data: Dict[str, Any]) -> None:
         """
         Set knowledge base metadata from dictionary.
@@ -257,6 +278,15 @@ class AbendDynamoTable(Model):
         """
         self.knowledge_base_metadata = kb_data
     
+    def get_knowledge_base_metadata(self) -> Optional[Dict[str, Any]]:
+        """
+        Get knowledge base metadata as dictionary.
+        
+        Returns:
+            Dictionary containing knowledge base metadata or None if not set
+        """
+        return self.knowledge_base_metadata
+    
     def set_remediation_metadata(self, remediation_data: Dict[str, Any]) -> None:
         """
         Set remediation metadata from dictionary.
@@ -265,3 +295,12 @@ class AbendDynamoTable(Model):
             remediation_data: Dictionary containing remediation metadata
         """
         self.remediation_metadata = remediation_data
+    
+    def get_remediation_metadata(self) -> Optional[Dict[str, Any]]:
+        """
+        Get remediation metadata as dictionary.
+        
+        Returns:
+            Dictionary containing remediation metadata or None if not set
+        """
+        return self.remediation_metadata
