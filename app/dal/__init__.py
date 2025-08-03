@@ -3,19 +3,23 @@ Database Access Layer (DAL) package initialization.
 """
 
 from .abend_repository import (
-    get_abends_with_filters,
     get_abend_by_tracking_id,
+    get_abends_for_date,
+    get_todays_abends,
+    get_abends_by_date_range,
+    get_job_history,
+    get_abends_unified,
     update_abend_fields,
-    update_remediation_approval,
-    get_available_filter_values,
-    get_today_stats
+    get_stats_for_date
 )
 
 __all__ = [
-    "get_abends_with_filters",
-    "get_abend_by_tracking_id", 
+    "get_abend_by_tracking_id",
+    "get_abends_for_date",
+    "get_todays_abends", 
+    "get_abends_by_date_range",
+    "get_job_history",
+    "get_abends_unified",
     "update_abend_fields",
-    "update_remediation_approval",
-    "get_available_filter_values",
-    "get_today_stats"
+    "get_stats_for_date"
 ]

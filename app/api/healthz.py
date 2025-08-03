@@ -10,12 +10,12 @@ router = APIRouter()
     "",
     summary="Health check to verify service is running.",
     description="Health check to verify service is running.",
-    response_model=generic_responses.Message,
-    responses={HTTP_500_INTERNAL_SERVER_ERROR: {"model": generic_responses.Message}},
+    response_model=generic_responses.GenericResponse,
+    responses={HTTP_500_INTERNAL_SERVER_ERROR: {"model": generic_responses.GenericResponse}},
 )
-def healthz() -> generic_responses.Message:
+def healthz() -> generic_responses.GenericResponse:
     """
     API endpoint for kubelet to verify service liveness
     :return:
     """
-    return generic_responses.Message(message="OK")
+    return generic_responses.GenericResponse(message="OK")

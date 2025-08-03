@@ -4,8 +4,14 @@ import os
 import uvicorn
 from fastapi import FastAPI
 from structlog import get_logger
+from pydantic import ValidationError
+from pydantic_core import ValidationError as PydanticCoreValidationError
 
 from app.api import route_management, tags
+from app.api.exception_handlers import (
+    validation_exception_handler,
+    pydantic_core_validation_exception_handler
+)
 from app.core.logger import struct_logger
 from app.core.config import settings
 
@@ -17,6 +23,10 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application"""
     app = FastAPI()
     # TODO: Add Middlewares
+
+    # Add global exception handlers for Pydantic validation errors
+    app.add_exception_handler(ValidationError, validation_exception_handler)
+    app.add_exception_handler(PydanticCoreValidationError, pydantic_core_validation_exception_handler)
 
     # Initialize routes based on API_MODE environment variable or default to ALL
     api_mode = os.getenv("API_MODE", "ALL")

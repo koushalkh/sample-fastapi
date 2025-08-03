@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from starlette import status
 
 from app.api import tags
-from app.models.generic_responses import Message
+from app.models.generic_responses import GenericResponse
 from app.models.sop import SOPDetail
 
 # Create the router
@@ -14,7 +14,7 @@ router = APIRouter()
     summary="Get SOP details for UI",
     description="Get detailed information about a specific SOP for UI display.",
     response_model=SOPDetail,
-    responses={status.HTTP_404_NOT_FOUND: {"model": Message}},
+    responses={status.HTTP_404_NOT_FOUND: {"model": GenericResponse}},
     tags=[tags.UI_SOP_V1ALPHA1.display_name],
 )
 async def get_sop_for_ui(sop_id: str) -> SOPDetail:

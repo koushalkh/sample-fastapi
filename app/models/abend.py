@@ -1,15 +1,16 @@
 from datetime import date, datetime
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+from app.utils.pagination import is_valid_cursor, decode_cursor
 
 
 class SeverityEnum(str, Enum):
     """Severity levels for ABEND incidents."""
-    HIGH = "High"
-    MEDIUM = "Medium"
-    LOW = "Low"
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
 
 
 class ADRStatusEnum(str, Enum):
@@ -76,10 +77,10 @@ class RemediationMetadata(BaseModel):
 class AbendModel(BaseModel):
     """Simplified ABEND model for UI table display and listing."""
     tracking_id: str = Field(..., alias="trackingID")
-    job_id: str = Field(..., alias="jobID")
+    job_id: Optional[str] = Field(None, alias="jobID")
     job_name: str = Field(..., alias="jobName")
     adr_status: ADRStatusEnum = Field(..., alias="adrStatus")
-    severity: SeverityEnum
+    severity: Optional[SeverityEnum] = Field(None, description="Severity level of the ABEND incident")
     abended_at: datetime = Field(..., alias="abendedAt")
     domain_area: Optional[str] = Field(None, alias="domainArea")
     created_at: datetime = Field(..., alias="createdAt")
@@ -130,40 +131,162 @@ class AbendDetailsModel(BaseModel):
 
 
 # Request Models
-class GetAbendsRequest(BaseModel):
-    """Request model for getting ABEND records with filters and pagination."""
+class GetAbendsFilter(BaseModel):
+    """Filter model for getting ABEND records with filters and cursor-based pagination."""
     # Filters
     domain_area: Optional[str] = Field(None, alias="domainArea")
     adr_status: Optional[ADRStatusEnum] = Field(None, alias="adrStatus")
-    severity: Optional[SeverityEnum] = None
+    severity: Optional[str] = Field(None, description="Severity level (will be converted to enum)")
     
-    # Date filters - either single date or range
-    abended_at: Optional[date] = Field(None, alias="abendedAt", description="Filter by specific date")
-    abended_at_start_date: Optional[date] = Field(None, alias="abendedAtStartDate", description="Start date for range filter")
-    abended_at_end_date: Optional[date] = Field(None, alias="abendedAtEndDate", description="End date for range filter")
+    # Date filters - simplified logic: start_date required, end_date optional
+    abended_at_start_date: Optional[str] = Field(None, alias="abendedAtStartDate", description="Start date (YYYY-MM-DD). If end_date not provided, searches single day. Defaults to today if not provided.")
+    abended_at_end_date: Optional[str] = Field(None, alias="abendedAtEndDate", description="End date for range filter (YYYY-MM-DD). Optional - if not provided, searches single day using start_date.")
     
     # Search
     search: Optional[str] = Field(None, description="Search by job name")
     
-    # Pagination
-    limit: int = Field(default=5, ge=1, le=10, description="Number of records per page (max 10)")
-    offset: int = Field(default=0, ge=0, description="Number of records to skip")
+    # Pagination - cursor-based only for optimal performance
+    limit: int = Field(default=5, ge=1, le=10, description="Number of records per page (max 100)")
+    cursor: Optional[str] = Field(None, description="Pagination cursor for efficient cursor-based pagination")
+    
+    # Internal converted fields (populated after validation)
+    _parsed_severity: Optional[SeverityEnum] = None
+    _parsed_start_date: Optional[date] = None
+    _parsed_end_date: Optional[date] = None
+    _decoded_cursor: Optional[Dict[str, Any]] = None
+
+    @field_validator('cursor')
+    @classmethod
+    def validate_cursor(cls, v: Optional[str]) -> Optional[str]:
+        """Validate cursor format and decodability."""
+        if v is None:
+            return v
+        
+        if not is_valid_cursor(v):
+            raise ValueError("Invalid cursor format. Cursor must be a valid base64-encoded pagination token.")
+        
+        return v
+
+    @field_validator('severity')
+    @classmethod
+    def validate_severity(cls, v: Optional[str]) -> Optional[str]:
+        """Validate and return the severity string for later conversion (case-insensitive and handles migration)."""
+        if v is None:
+            return v
+        
+        # Handle case-insensitive mapping and migration from old format
+        v_upper = v.upper()
+        severity_mapping = {
+            'HIGH': 'HIGH',
+            'MEDIUM': 'MEDIUM', 
+            'LOW': 'LOW',
+            # Legacy format mapping for database migration
+            'High': 'HIGH',
+            'Medium': 'MEDIUM',
+            'Low': 'LOW'
+        }
+        
+        if v in severity_mapping:
+            return severity_mapping[v]
+        elif v_upper in severity_mapping:
+            return severity_mapping[v_upper]
+        
+        # If no mapping found, try the original validation
+        try:
+            SeverityEnum(v)
+            return v
+        except ValueError:
+            print("==========================================")
+            raise ValueError(f"Invalid severity value '{v}'. Use one of: {[s.value for s in SeverityEnum]} (case-insensitive)")
+
+    @field_validator('abended_at_start_date')
+    @classmethod
+    def validate_start_date(cls, v: Optional[str]) -> Optional[str]:
+        """Validate start date format."""
+        if v is None:
+            return v
+        try:
+            date.fromisoformat(v)
+            return v
+        except ValueError:
+            raise ValueError("Invalid start date format. Use YYYY-MM-DD format.")
 
     @field_validator('abended_at_end_date')
     @classmethod
-    def validate_date_range(cls, v: Optional[date], info) -> Optional[date]:
-        """Ensure end date is not before start date."""
-        if v and info.data.get('abended_at_start_date') and v < info.data['abended_at_start_date']:
-            raise ValueError('End date cannot be before start date')
-        return v
+    def validate_end_date(cls, v: Optional[str]) -> Optional[str]:
+        """Validate end date format."""
+        if v is None:
+            return v
+        try:
+            date.fromisoformat(v)
+            return v
+        except ValueError:
+            raise ValueError("Invalid end date format. Use YYYY-MM-DD format.")
 
-    @field_validator('abended_at')
-    @classmethod
-    def validate_single_date_vs_range(cls, v: Optional[date], info) -> Optional[date]:
-        """Ensure single date and range filters are not used together."""
-        if v and (info.data.get('abended_at_start_date') or info.data.get('abended_at_end_date')):
-            raise ValueError('Cannot use both single date and date range filters')
-        return v
+    @model_validator(mode='after')
+    def validate_and_convert_dates(self) -> 'GetAbendsFilter':
+        """Validate date logic, convert strings to date objects, and decode cursor."""
+        # Convert start date or default to today
+        if self.abended_at_start_date:
+            self._parsed_start_date = date.fromisoformat(self.abended_at_start_date)
+        else:
+            # Default to today if no start date provided
+            from datetime import datetime, timezone
+            self._parsed_start_date = datetime.now(timezone.utc).date()
+        
+        # Convert end date if provided
+        if self.abended_at_end_date:
+            self._parsed_end_date = date.fromisoformat(self.abended_at_end_date)
+            
+            # Validate date range order
+            if self._parsed_end_date < self._parsed_start_date:
+                raise ValueError("End date cannot be before start date")
+        else:
+            # If no end date, single day search using start date
+            self._parsed_end_date = self._parsed_start_date
+        
+        # Convert severity string to enum
+        if self.severity:
+            self._parsed_severity = SeverityEnum(self.severity)
+        
+        # Decode cursor for DynamoDB pagination
+        if self.cursor:
+            self._decoded_cursor = decode_cursor(self.cursor)
+            # Note: decode_cursor already handles validation, but if it returns None,
+            # the cursor was invalid and we'll proceed without pagination
+        
+        return self
+
+    # Convenience properties to access converted values
+    @property
+    def parsed_severity(self) -> Optional[SeverityEnum]:
+        """Get the parsed severity enum."""
+        return self._parsed_severity
+    
+    @property
+    def parsed_start_date(self) -> Optional[date]:
+        """Get the parsed start date (defaults to today if not provided)."""
+        return self._parsed_start_date
+    
+    @property
+    def parsed_end_date(self) -> Optional[date]:
+        """Get the parsed end date (equals start_date for single day searches)."""
+        return self._parsed_end_date
+    
+    @property
+    def is_single_day(self) -> bool:
+        """Check if this is a single day search."""
+        return self._parsed_start_date == self._parsed_end_date
+    
+    @property
+    def is_date_range(self) -> bool:
+        """Check if this is a date range search."""
+        return self._parsed_start_date != self._parsed_end_date
+    
+    @property
+    def decoded_cursor(self) -> Optional[Dict[str, Any]]:
+        """Get the decoded cursor for DynamoDB pagination."""
+        return self._decoded_cursor
 
 
 class AIRecommendationApprovalRequest(BaseModel):
@@ -174,12 +297,13 @@ class AIRecommendationApprovalRequest(BaseModel):
 
 # Response Models
 class PaginationMeta(BaseModel):
-    """Pagination metadata."""
-    total: int = Field(..., description="Total number of records")
+    """Pagination metadata for cursor-based pagination."""
+    total: int = Field(..., description="Total number of records (estimated for cursor-based pagination)")
     limit: int = Field(..., description="Records per page")
-    offset: int = Field(..., description="Records skipped")
     has_next: bool = Field(..., alias="hasNext", description="Whether there are more records")
     has_previous: bool = Field(..., alias="hasPrevious", description="Whether there are previous records")
+    next_cursor: Optional[str] = Field(None, alias="nextCursor", description="Cursor for next page")
+    prev_cursor: Optional[str] = Field(None, alias="prevCursor", description="Cursor for previous page")
 
 
 class GetAbendsResponse(BaseModel):

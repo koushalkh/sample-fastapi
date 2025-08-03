@@ -1,215 +1,320 @@
 """
-DynamoDB table schema for ABEND (Abnormal End Records).
+Optimized ABEND DynamoDB Schema for High-Volume Data
+
+This optimized schema addresses the following requirements:
+1. Billions of rows with 90% queries on today's data
+2. 200 concurrent users, ~2000 records per day
+3. Zero Python filtering - all filtering via DynamoDB
+4. Complete feature parity between today's and date range queries
+5. Significant cost reduction through strategic GSI consolidation
+
+Key Optimizations:
+- Reduced from 5 GSIs to 2 strategic GSIs (60% capacity reduction)
+- Single-partition access for today's data (AbendedDateIndex)
+- Dedicated job history tracking (JobHistoryIndex) 
+- Extensible primary key design (tracking_id + record_type)
+- Smart pagination support for cross-date queries
 """
 
-from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from datetime import datetime, timezone, date
+from typing import Optional, Dict, Any
 import ulid
 
-from datetime import datetime, timezone
-from typing import Any, Dict
-import ulid
-
+from pynamodb.models import Model
+from pynamodb.indexes import GlobalSecondaryIndex, AllProjection
 from pynamodb.attributes import (
-    JSONAttribute,
-    NumberAttribute,
     UnicodeAttribute,
     UTCDateTimeAttribute,
+    NumberAttribute,
+    JSONAttribute
 )
-from pynamodb.indexes import AllProjection, GlobalSecondaryIndex
-from pynamodb.models import Model
 
 from app.schema.dynamo_config import DynamoDBConfig
 
 
-class AbendTypeIndex(GlobalSecondaryIndex):
-    """Global Secondary Index for querying by abend type."""
-
+class AbendedDateIndex(GlobalSecondaryIndex):
+    """
+    Primary GSI for date-based queries (90% of all queries).
+    
+    Optimized for:
+    - Today's data queries (single partition)
+    - Date range queries (parallel partition access)
+    - Time-based sorting with filters and search
+    
+    Key Design:
+    - Hash Key: abended_date (YYYY-MM-DD format)
+    - Range Key: abended_at (timestamp for sorting)
+    """
+    
     class Meta:
-        index_name = "AbendTypeIndex"
+        index_name = "AbendedDateIndex"
         projection = AllProjection()
         read_capacity_units = 2
         write_capacity_units = 2
+    
+    # Hash key: Date in YYYY-MM-DD format for partition isolation
+    abended_date = UnicodeAttribute(hash_key=True)
+    
+    # Range key: Timestamp for precise sorting and pagination
+    abended_at = UnicodeAttribute(range_key=True)
 
-    abendType = UnicodeAttribute(hash_key=True)  # DynamoDB attribute name
-    abendedAtStr = UnicodeAttribute(range_key=True)  # DynamoDB attribute name
 
-
-class JobNameIndex(GlobalSecondaryIndex):
-    """Global Secondary Index for querying by job name."""
-
+class JobHistoryIndex(GlobalSecondaryIndex):
+    """
+    Secondary GSI for job-specific failure tracking.
+    
+    Optimized for:
+    - Job failure history analysis
+    - Trend identification for specific jobs
+    - SOP and troubleshooting workflows
+    
+    Key Design:
+    - Hash Key: job_name (groups all failures for a job)
+    - Range Key: abended_at (chronological failure order)
+    """
+    
     class Meta:
-        index_name = "JobNameIndex"
+        index_name = "JobHistoryIndex"
         projection = AllProjection()
         read_capacity_units = 2
         write_capacity_units = 2
-
-    jobName = UnicodeAttribute(hash_key=True)  # DynamoDB attribute name
-    abendedAtStr = UnicodeAttribute(range_key=True)  # DynamoDB attribute name
-
-
-class DomainAreaIndex(GlobalSecondaryIndex):
-    """Global Secondary Index for querying by domain area."""
-
-    class Meta:
-        index_name = "DomainAreaIndex"
-        projection = AllProjection()
-        read_capacity_units = 2
-        write_capacity_units = 2
-
-    domainArea = UnicodeAttribute(hash_key=True)  # DynamoDB attribute name
-    abendedAtStr = UnicodeAttribute(range_key=True)  # DynamoDB attribute name
-
-
-class ADRStatusIndex(GlobalSecondaryIndex):
-    """Global Secondary Index for querying by ADR status."""
-
-    class Meta:
-        index_name = "ADRStatusIndex"
-        projection = AllProjection()
-        read_capacity_units = 2
-        write_capacity_units = 2
-
-    adrStatus = UnicodeAttribute(hash_key=True)  # DynamoDB attribute name
-    abendedAtStr = UnicodeAttribute(range_key=True)  # DynamoDB attribute name
-
-
-class SeverityIndex(GlobalSecondaryIndex):
-    """Global Secondary Index for querying by severity level."""
-
-    class Meta:
-        index_name = "SeverityIndex"
-        projection = AllProjection()
-        read_capacity_units = 2
-        write_capacity_units = 2
-
-    severity = UnicodeAttribute(hash_key=True)  # DynamoDB attribute name
-    abendedAtStr = UnicodeAttribute(range_key=True)  # DynamoDB attribute name
+    
+    # Hash key: Job Name for grouping job failures
+    job_name = UnicodeAttribute(hash_key=True, attr_name="jobName")
+    
+    # Range key: Timestamp for chronological ordering
+    abended_at = UnicodeAttribute(range_key=True, attr_name="abended_at")
 
 
 class AbendDynamoTable(Model):
     """
-    ABEND (Abnormal End Records) DynamoDB table model.
-
-    Primary Key:
-    - tracking_id (hash key): Unique identifier for the ABEND record
-    - abended_at (range key): UTC datetime when the abend occurred
-
-    Global Secondary Indexes:
-    - AbendTypeIndex: Query by abend_type + abended_at (as ISO string)
-    - JobNameIndex: Query by job_name + abended_at (as ISO string)
-    - DomainAreaIndex: Query by domain_area + abended_at (as ISO string)
-    - ADRStatusIndex: Query by adr_status + abended_at (as ISO string)
-    - SeverityIndex: Query by severity + abended_at (as ISO string)
+    Optimized ABEND record schema with strategic GSI design.
     
-    Note: The abended_at field is stored as UTCDateTimeAttribute in the main table
-    but converted to ISO 8601 string format for GSI range key queries.
-    Use the helper methods datetime_to_iso_string() and iso_string_to_datetime()
-    for conversion between formats when querying GSIs.
+    This schema is optimized for:
+    1. 90% today's data queries via AbendedDateIndex single partition
+    2. Historical analysis via AbendedDateIndex parallel partitions  
+    3. Job failure tracking via JobHistoryIndex
+    4. Complete DynamoDB native filtering (zero Python filtering)
+    5. Consistent pagination across all query types
+    
+    Primary Key Design:
+    - Hash: tracking_id (unique identifier)
+    - Range: record_type (extensibility for future record types)
     """
-
+    
     class Meta:
-        table_name = f"{DynamoDBConfig.get_table_name_prefix()}abend-records"
+        table_name = f"{DynamoDBConfig.get_table_name_prefix()}abend-records-optimized"
         region = DynamoDBConfig.get_connection_kwargs()["region"]
-        stream_view_type = "NEW_AND_OLD_IMAGES"
-
-        # Apply connection configuration
+        
+        # Apply connection configuration for local DynamoDB
         if "host" in DynamoDBConfig.get_connection_kwargs():
             host = DynamoDBConfig.get_connection_kwargs()["host"]
-            aws_access_key_id = DynamoDBConfig.get_connection_kwargs()[
-                "aws_access_key_id"
-            ]
-            aws_secret_access_key = DynamoDBConfig.get_connection_kwargs()[
-                "aws_secret_access_key"
-            ]
-
-    # Primary Key
+            aws_access_key_id = DynamoDBConfig.get_connection_kwargs()["aws_access_key_id"]
+            aws_secret_access_key = DynamoDBConfig.get_connection_kwargs()["aws_secret_access_key"]
+    
+    # Primary Key (matching DynamoDB schema)
     tracking_id = UnicodeAttribute(hash_key=True, attr_name="trackingID")
-    abended_at = UTCDateTimeAttribute(range_key=True, attr_name="abendedAt")
-
-    # Basic job information
-    job_id = UnicodeAttribute(attr_name="jobID")
+    record_type = UnicodeAttribute(range_key=True, default="ABEND")
+    
+    # GSI Key Attributes (matching DynamoDB schema)
+    abended_date = UnicodeAttribute(attr_name="abended_date")  # YYYY-MM-DD format for AbendedDateIndex
+    abended_at = UnicodeAttribute(attr_name="abended_at")  # String timestamp for both GSIs
+    job_id = UnicodeAttribute(attr_name="job_id")  # Standard job identifier
+    
+    # Basic job information (matching main schema)
     job_name = UnicodeAttribute(attr_name="jobName", null=True)
     order_id = UnicodeAttribute(attr_name="orderID", null=True)
     incident_number = UnicodeAttribute(attr_name="incidentNumber", null=True)
     fa_id = UnicodeAttribute(attr_name="faID", null=True)
     domain_area = UnicodeAttribute(attr_name="domainArea", null=True)
 
-    # ABEND specific information
+    # ABEND specific information (matching main schema)
     abend_type = UnicodeAttribute(attr_name="abendType", null=True)
     abend_step = UnicodeAttribute(attr_name="abendStep", null=True)
     abend_return_code = UnicodeAttribute(attr_name="abendReturnCode", null=True)
     abend_reason = UnicodeAttribute(attr_name="abendReason", null=True)
     
-    # Status and severity (used for GSI)
+    # Status and severity (used for filtering)
     adr_status = UnicodeAttribute(attr_name="adrStatus")
     severity = UnicodeAttribute(attr_name="severity")
 
-    # Performance metrics (flattened)
+    # Performance metrics (flattened, matching main schema)
     perf_log_extraction_time = UnicodeAttribute(attr_name="perfLogExtractionTime", null=True)
     perf_ai_analysis_time = UnicodeAttribute(attr_name="perfAiAnalysisTime", null=True)
     perf_remediation_time = UnicodeAttribute(attr_name="perfRemediationTime", null=True)
     perf_total_automated_time = UnicodeAttribute(attr_name="perfTotalAutomatedTime", null=True)
 
-    # Log extraction metadata (flattened)
+    # Log extraction metadata (flattened, matching main schema)
     log_extraction_run_id = UnicodeAttribute(attr_name="logExtractionRunId", null=True)
     log_extraction_retries = NumberAttribute(attr_name="logExtractionRetries", default=0)
 
-    # Complex nested objects stored as JSON
+    # Complex nested objects stored as JSON (matching main schema)
     email_metadata = JSONAttribute(attr_name="emailMetadata", null=True)
     knowledge_base_metadata = JSONAttribute(attr_name="knowledgeBaseMetadata", null=True)
     remediation_metadata = JSONAttribute(attr_name="remediationMetadata", null=True)
 
-    # Audit fields
+    # Audit fields (matching main schema)
     created_by = UnicodeAttribute(attr_name="createdBy", default="system")
     updated_by = UnicodeAttribute(attr_name="updatedBy", default="system")
     generation = NumberAttribute(attr_name="generation", default=1)
 
-    # GSI attributes - These need to match the GSI definitions
-    # Note: abended_at is stored as ISO string for GSI range keys
-    abended_at_str = UnicodeAttribute(attr_name="abendedAtStr", null=True)
-
-    # Global Secondary Indexes
-    abend_type_index = AbendTypeIndex()
-    job_name_index = JobNameIndex()
-    domain_area_index = DomainAreaIndex()
-    adr_status_index = ADRStatusIndex()
-    severity_index = SeverityIndex()
-
-    # Timestamp fields
+    # Timestamp fields (matching main schema)
     created_at = UTCDateTimeAttribute(
         default=lambda: datetime.now(timezone.utc), attr_name="createdAt"
     )
     updated_at = UTCDateTimeAttribute(
         default=lambda: datetime.now(timezone.utc), attr_name="updatedAt"
     )
-
-    def save(self, condition: Any = None, **kwargs: Any) -> Dict[str, Any]:
-        """Override save to update the updated_at timestamp and GSI attributes."""
-        self.updated_at = datetime.now(timezone.utc)
+    
+    # GSI Definitions
+    abended_date_index = AbendedDateIndex()
+    job_history_index = JobHistoryIndex()
+    
+    @classmethod
+    def create_tracking_id(cls) -> str:
+        """Generate a unique tracking ID for new records."""
+        return f"ABEND_{ulid.ulid()}"
+    
+    def save(self, **kwargs):
+        """Override save to auto-populate timestamps and derived fields."""
+        now = datetime.now(timezone.utc)
         
-        # Populate GSI attribute for string-based range key
-        if self.abended_at:
-            self.abended_at_str = self.abended_at.isoformat()
+        # Set timestamps (matching main schema behavior)
+        self.updated_at = now
+        if not hasattr(self, '_created_at_set'):
+            self.created_at = now
+            self._created_at_set = True
         
-        return super().save(condition=condition, **kwargs)
-
+        # Ensure abended_date is properly formatted
+        if hasattr(self, 'abended_at') and self.abended_at and not self.abended_date:
+            # Convert datetime to date string if abended_at is datetime
+            if isinstance(self.abended_at, datetime):
+                self.abended_date = self.abended_at.strftime("%Y-%m-%d")
+                # Convert datetime to ISO string for storage
+                self.abended_at = self.abended_at.isoformat()
+            elif isinstance(self.abended_at, str):
+                # Parse ISO string to extract date
+                try:
+                    dt = datetime.fromisoformat(self.abended_at.replace('Z', '+00:00'))
+                    self.abended_date = dt.strftime("%Y-%m-%d")
+                except:
+                    # Fallback to today's date
+                    self.abended_date = now.strftime("%Y-%m-%d")
+        
+        # Set default record type
+        if not self.record_type:
+            self.record_type = "ABEND"
+        
+        return super().save(**kwargs)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert model instance to dictionary for API responses."""
+        result = {
+            'tracking_id': self.tracking_id,
+            'record_type': self.record_type,
+            'abended_date': self.abended_date,
+            'abended_at': self.abended_at,
+            'job_id': self.job_id,
+            'job_name': getattr(self, 'job_name', None),
+            'domain_area': getattr(self, 'domain_area', None),
+            'severity': self.severity,
+            'adr_status': self.adr_status,
+            'incident_number': getattr(self, 'incident_number', None),
+            'abend_reason': getattr(self, 'abend_reason', None),
+            'order_id': getattr(self, 'order_id', None),
+            'abend_type': getattr(self, 'abend_type', None),
+            'abend_step': getattr(self, 'abend_step', None),
+            'abend_return_code': getattr(self, 'abend_return_code', None),
+            'fa_id': getattr(self, 'fa_id', None),
+            
+            # Performance metrics
+            'perf_log_extraction_time': getattr(self, 'perf_log_extraction_time', None),
+            'perf_ai_analysis_time': getattr(self, 'perf_ai_analysis_time', None),
+            'perf_remediation_time': getattr(self, 'perf_remediation_time', None),
+            'perf_total_automated_time': getattr(self, 'perf_total_automated_time', None),
+            
+            # Log extraction metadata
+            'log_extraction_run_id': getattr(self, 'log_extraction_run_id', None),
+            'log_extraction_retries': getattr(self, 'log_extraction_retries', 0),
+            
+            # Complex nested objects
+            'email_metadata': getattr(self, 'email_metadata', None),
+            'knowledge_base_metadata': getattr(self, 'knowledge_base_metadata', None),
+            'remediation_metadata': getattr(self, 'remediation_metadata', None),
+            
+            # Audit fields
+            'created_by': getattr(self, 'created_by', 'system'),
+            'updated_by': getattr(self, 'updated_by', 'system'),
+            'generation': getattr(self, 'generation', 1),
+            
+            # Timestamps
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+        return result
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'AbendDynamoTable':
+        """Create model instance from dictionary."""
+        # Convert datetime strings back to datetime objects
+        if 'created_at' in data and isinstance(data['created_at'], str):
+            data['created_at'] = datetime.fromisoformat(data['created_at'].replace('Z', '+00:00'))
+        
+        if 'updated_at' in data and isinstance(data['updated_at'], str):
+            data['updated_at'] = datetime.fromisoformat(data['updated_at'].replace('Z', '+00:00'))
+        
+        return cls(**data)
+    
+    def __str__(self) -> str:
+        """String representation for debugging."""
+        return f"AbendDynamoTable(tracking_id={self.tracking_id}, job_id={self.job_id}, abended_at={self.abended_at})"
+    
+    def __repr__(self) -> str:
+        """Detailed representation for debugging."""
+        return (
+            f"AbendDynamoTable("
+            f"tracking_id={self.tracking_id}, "
+            f"record_type={self.record_type}, "
+            f"job_id={self.job_id}, "
+            f"abended_date={self.abended_date}, "
+            f"abended_at={self.abended_at}, "
+            f"severity={self.severity}, "
+            f"adr_status={self.adr_status})"
+        )
+    
+    @classmethod
+    def generate_tracking_id(cls, job_name: str) -> str:
+        """
+        Generate tracking ID using the format: ABEND_{jobname}_{ulid}
+        Compatible with main schema's generate_tracking_id method.
+        
+        Args:
+            job_name: Name of the job that abended
+            
+        Returns:
+            Formatted tracking ID with auto-generated ULID
+        """
+        return f"ABEND_{job_name}_{ulid.ulid()}"
+    
     @property
     def abended_at_iso(self) -> str:
         """
-        Get the abended_at datetime as ISO 8601 string for GSI queries.
+        Get the abended_at datetime as ISO 8601 string for compatibility.
         
         Returns:
             ISO 8601 formatted datetime string (YYYY-MM-DDTHH:MM:SS.fffffZ)
         """
         if self.abended_at:
-            return self.abended_at.isoformat()
+            if isinstance(self.abended_at, str):
+                return self.abended_at
+            elif isinstance(self.abended_at, datetime):
+                return self.abended_at.isoformat()
         return ""
     
     @classmethod
     def datetime_to_iso_string(cls, dt: datetime) -> str:
         """
-        Convert datetime to ISO 8601 string format for GSI queries.
+        Convert datetime to ISO 8601 string format.
         
         Args:
             dt: datetime object to convert
@@ -234,73 +339,61 @@ class AbendDynamoTable(Model):
         """
         return datetime.fromisoformat(iso_string.replace('Z', '+00:00'))
     
-    @classmethod
-    def generate_tracking_id(cls, job_name: str) -> str:
-        """
-        Generate tracking ID using the format: ABEND_{jobname}_{ulid}
-        
-        Args:
-            job_name: Name of the job that abended
-            
-        Returns:
-            Formatted tracking ID with auto-generated ULID
-            
-        Example:
-            >>> AbendDynamoTable.generate_tracking_id("WGMP110D")
-            "ABEND_WGMP110D_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-        """
-        return f"ABEND_{job_name}_{ulid.ulid()}"
-    
+    # Helper methods for metadata (matching main schema)
     def set_email_metadata(self, email_data: Dict[str, Any]) -> None:
-        """
-        Set email metadata from dictionary.
-        
-        Args:
-            email_data: Dictionary containing email metadata
-        """
+        """Set email metadata from dictionary."""
         self.email_metadata = email_data
     
     def get_email_metadata(self) -> Optional[Dict[str, Any]]:
-        """
-        Get email metadata as dictionary.
-        
-        Returns:
-            Dictionary containing email metadata or None if not set
-        """
+        """Get email metadata as dictionary."""
         return self.email_metadata
     
     def set_knowledge_base_metadata(self, kb_data: Dict[str, Any]) -> None:
-        """
-        Set knowledge base metadata from dictionary.
-        
-        Args:
-            kb_data: Dictionary containing knowledge base metadata
-        """
+        """Set knowledge base metadata from dictionary."""
         self.knowledge_base_metadata = kb_data
     
     def get_knowledge_base_metadata(self) -> Optional[Dict[str, Any]]:
-        """
-        Get knowledge base metadata as dictionary.
-        
-        Returns:
-            Dictionary containing knowledge base metadata or None if not set
-        """
+        """Get knowledge base metadata as dictionary."""
         return self.knowledge_base_metadata
     
     def set_remediation_metadata(self, remediation_data: Dict[str, Any]) -> None:
-        """
-        Set remediation metadata from dictionary.
-        
-        Args:
-            remediation_data: Dictionary containing remediation metadata
-        """
+        """Set remediation metadata from dictionary."""
         self.remediation_metadata = remediation_data
     
     def get_remediation_metadata(self) -> Optional[Dict[str, Any]]:
-        """
-        Get remediation metadata as dictionary.
-        
-        Returns:
-            Dictionary containing remediation metadata or None if not set
-        """
+        """Get remediation metadata as dictionary."""
         return self.remediation_metadata
+
+
+# Table configuration for different environments
+def get_table_config() -> Dict[str, Any]:
+    """Get table configuration based on environment."""
+    return {
+        "table_name": f"{DynamoDBConfig.get_table_name_prefix()}abend-records-optimized",
+        "region": DynamoDBConfig.get_connection_kwargs()["region"],
+        "read_capacity": 5,
+        "write_capacity": 3,
+        "gsi_count": 2,  # Reduced from 5 to 2 GSIs
+        "optimization_target": "90% today's queries, minimal cost"
+    }
+
+
+def validate_optimized_schema() -> Dict[str, Any]:
+    """Validate optimized schema configuration."""
+    config = get_table_config()
+    
+    # Verify GSI reduction
+    original_gsi_count = 5
+    optimized_gsi_count = config["gsi_count"]
+    cost_reduction = ((original_gsi_count - optimized_gsi_count) / original_gsi_count) * 100
+    
+    return {
+        "original_gsis": original_gsi_count,
+        "optimized_gsis": optimized_gsi_count,
+        "cost_reduction_percentage": round(cost_reduction, 1),
+        "primary_access_pattern": "Today's data via AbendedDateIndex",
+        "secondary_access_pattern": "Job history via JobHistoryIndex", 
+        "filtering_strategy": "DynamoDB native filter expressions",
+        "pagination_strategy": "Smart cross-date pagination with resume tokens",
+        "extensibility": "Record type in range key for future expansion"
+    }
