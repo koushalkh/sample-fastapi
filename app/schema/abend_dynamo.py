@@ -119,7 +119,7 @@ class AbendDynamoTable(Model):
     # GSI Key Attributes (matching DynamoDB schema)
     abended_date = UnicodeAttribute(attr_name="abended_date")  # YYYY-MM-DD format for AbendedDateIndex
     abended_at = UnicodeAttribute(attr_name="abended_at")  # String timestamp for both GSIs
-    job_id = UnicodeAttribute(attr_name="job_id")  # Standard job identifier
+    job_id = UnicodeAttribute(attr_name="job_id", null=True)  # Standard job identifier - optional
     
     # Basic job information (matching main schema)
     job_name = UnicodeAttribute(attr_name="jobName", null=True)
@@ -170,11 +170,7 @@ class AbendDynamoTable(Model):
     abended_date_index = AbendedDateIndex()
     job_history_index = JobHistoryIndex()
     
-    @classmethod
-    def create_tracking_id(cls) -> str:
-        """Generate a unique tracking ID for new records."""
-        return f"ABEND_{ulid.ulid()}"
-    
+
     def save(self, **kwargs):
         """Override save to auto-populate timestamps and derived fields."""
         now = datetime.now(timezone.utc)
@@ -214,7 +210,7 @@ class AbendDynamoTable(Model):
             'record_type': self.record_type,
             'abended_date': self.abended_date,
             'abended_at': self.abended_at,
-            'job_id': self.job_id,
+            'job_id': getattr(self, 'job_id', None),
             'job_name': getattr(self, 'job_name', None),
             'domain_area': getattr(self, 'domain_area', None),
             'severity': self.severity,
@@ -363,37 +359,3 @@ class AbendDynamoTable(Model):
     def get_remediation_metadata(self) -> Optional[Dict[str, Any]]:
         """Get remediation metadata as dictionary."""
         return self.remediation_metadata
-
-
-# Table configuration for different environments
-def get_table_config() -> Dict[str, Any]:
-    """Get table configuration based on environment."""
-    return {
-        "table_name": f"{DynamoDBConfig.get_table_name_prefix()}abend-records-optimized",
-        "region": DynamoDBConfig.get_connection_kwargs()["region"],
-        "read_capacity": 5,
-        "write_capacity": 3,
-        "gsi_count": 2,  # Reduced from 5 to 2 GSIs
-        "optimization_target": "90% today's queries, minimal cost"
-    }
-
-
-def validate_optimized_schema() -> Dict[str, Any]:
-    """Validate optimized schema configuration."""
-    config = get_table_config()
-    
-    # Verify GSI reduction
-    original_gsi_count = 5
-    optimized_gsi_count = config["gsi_count"]
-    cost_reduction = ((original_gsi_count - optimized_gsi_count) / original_gsi_count) * 100
-    
-    return {
-        "original_gsis": original_gsi_count,
-        "optimized_gsis": optimized_gsi_count,
-        "cost_reduction_percentage": round(cost_reduction, 1),
-        "primary_access_pattern": "Today's data via AbendedDateIndex",
-        "secondary_access_pattern": "Job history via JobHistoryIndex", 
-        "filtering_strategy": "DynamoDB native filter expressions",
-        "pagination_strategy": "Smart cross-date pagination with resume tokens",
-        "extensibility": "Record type in range key for future expansion"
-    }

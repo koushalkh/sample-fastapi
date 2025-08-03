@@ -18,6 +18,8 @@ from app.models.abend import (
     JobLogsResponse,
     AIRecommendationApprovalRequest,
     AIRecommendationApprovalResponse,
+    CreateAbendRequest,
+    CreateAbendResponse,
     ADRStatusEnum,
     SeverityEnum,
 )
@@ -95,6 +97,45 @@ class AbendService:
             
         except Exception as e:
             self.logger.error("Error getting abend details", tracking_id=tracking_id, error=str(e))
+            raise
+
+    async def create_abend(self, request: CreateAbendRequest) -> CreateAbendResponse:
+        """
+        Create a new ABEND record via internal API.
+        Generates unique tracking ID and initializes with ABEND_REGISTERED status.
+        """
+        try:
+
+            self.logger.info("Creating new ABEND record",
+                           job_name=request.job_name,
+                           severity=request.severity,
+                           incident_id=request.incident_id)
+            
+            # Create ABEND record via DAL
+            abend_details = abend_repository.create_abend(
+                job_name=request.job_name,
+                abended_at=request.abended_at,
+                severity=request.severity,
+                service_now_group=request.service_now_group,
+                incident_id=request.incident_id,
+                order_id=request.order_id
+            )
+            
+            # Return success response
+            return CreateAbendResponse(
+                trackingID=abend_details.tracking_id,
+                jobName=abend_details.job_name,
+                adrStatus=abend_details.adr_status,
+                severity=abend_details.severity,
+                abendedAt=abend_details.abended_at,
+                createdAt=abend_details.created_at,
+                message=f"ABEND record created successfully with tracking ID: {abend_details.tracking_id}"
+            )
+            
+        except Exception as e:
+            self.logger.error("Error creating ABEND record",
+                            job_name=request.job_name,
+                            error=str(e))
             raise
 
     async def update_ai_remediation_approval(

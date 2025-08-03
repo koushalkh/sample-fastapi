@@ -357,6 +357,108 @@ def get_abends_by_date_range(
         raise
 
 
+def create_abend(
+    job_name: str,
+    abended_at: datetime,
+    severity: SeverityEnum,
+    service_now_group: str,
+    incident_id: str,
+    order_id: Optional[str] = None,
+    job_id: Optional[str] = None,
+    domain_area: Optional[str] = None
+) -> AbendDetailsModel:
+    """
+    Create a new ABEND record - OPTIMIZED for direct insert.
+    
+    ACCESS PATTERN: Internal API ABEND creation
+    OPTIMIZATION: Direct PK insert with computed GSI keys
+    PERFORMANCE: 1 WCU, <20ms latency
+    
+    Args:
+        job_name: Name of the job that abended
+        abended_at: When the ABEND occurred
+        severity: Severity level of the ABEND
+        service_now_group: ServiceNow group responsible
+        incident_id: ServiceNow incident ID
+        order_id: Optional order ID
+        job_id: Optional job ID (defaults to job_name if not provided)
+        domain_area: Optional domain area
+        
+    Returns:
+        AbendDetailsModel of the created record
+        
+    Raises:
+        Exception if creation fails
+    """
+
+    tracking_id = AbendDynamoTable.generate_tracking_id(job_name=job_name)
+
+    logger.info("Creating new ABEND record",
+                tracking_id=tracking_id,
+                job_name=job_name,
+                severity=severity,
+                incident_id=incident_id)
+        
+    try:
+        # Ensure timezone-aware datetime
+        if abended_at.tzinfo is None:
+            abended_at = abended_at.replace(tzinfo=timezone.utc)
+        
+        # Generate current timestamp
+        now = datetime.now(timezone.utc)
+        
+        # Prepare GSI key values
+        abended_date = abended_at.date().strftime("%Y-%m-%d")
+        abended_at_str = abended_at.replace(microsecond=0).isoformat()
+        
+        # Create new ABEND record
+        abend_record = AbendDynamoTable(
+            # Primary key
+            tracking_id=tracking_id,
+            record_type="ABEND",
+            
+            # GSI keys
+            abended_date=abended_date,
+            abended_at=abended_at_str,
+            
+            # Basic job information
+            job_name=job_name,
+            job_id=job_id or job_name,  # Default job_id to job_name if not provided
+            order_id=order_id,
+            domain_area=domain_area,
+            
+            # ABEND metadata
+            incident_number=incident_id,
+            adr_status=ADRStatusEnum.ABEND_REGISTERED.value,
+            severity=severity.value,
+            
+            # Audit fields
+            created_at=now,
+            updated_at=now,
+            created_by="internal-api",
+            updated_by="internal-api",
+            generation=1
+        )
+        
+        # Save to DynamoDB
+        abend_record.save()
+        
+        logger.info("Successfully created ABEND record",
+                   tracking_id=tracking_id,
+                   job_name=job_name,
+                   adr_status=ADRStatusEnum.ABEND_REGISTERED.value)
+        
+        # Convert to model and return
+        return _convert_to_abend_details_model(abend_record)
+        
+    except Exception as e:
+        logger.error("Error creating ABEND record",
+                    tracking_id=tracking_id,
+                    job_name=job_name,
+                    error=str(e))
+        raise
+
+
 def update_abend_fields(
     tracking_id: str,
     updates: Dict[str, Any]

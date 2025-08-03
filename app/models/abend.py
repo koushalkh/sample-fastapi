@@ -91,11 +91,11 @@ class AbendDetailsModel(BaseModel):
     """Complete ABEND model with all details."""
     # Basic fields (from AbendModel)
     tracking_id: str = Field(..., alias="trackingID")
-    job_id: str = Field(..., alias="jobID")
+    job_id: Optional[str] = Field(None, alias="jobID")
     job_name: str = Field(..., alias="jobName")
     abended_at: datetime = Field(..., alias="abendedAt")
     adr_status: ADRStatusEnum = Field(..., alias="adrStatus")
-    severity: SeverityEnum
+    severity: SeverityEnum = Field(..., alias="severity")
     domain_area: Optional[str] = Field(None, alias="domainArea")
     incident_number: Optional[str] = Field(None, alias="incidentNumber")
     
@@ -347,4 +347,25 @@ class AIRecommendationApprovalResponse(BaseModel):
     tracking_id: str = Field(..., alias="trackingID", description="ABEND tracking ID")
     approval_status: AIRemediationApprovalStatusEnum = Field(..., alias="approvalStatus")
     approved_at: datetime = Field(..., alias="approvedAt", description="Approval timestamp")
+    message: str = Field(..., description="Success message")
+
+
+class CreateAbendRequest(BaseModel):
+    """Request model for creating a new ABEND record via internal API."""
+    abended_at: datetime = Field(..., alias="abendedAt", description="When the ABEND occurred")
+    job_name: str = Field(..., alias="jobName", description="Name of the job that abended", min_length=1, max_length=255)
+    order_id: Optional[str] = Field(None, alias="orderId", description="Order ID related to the ABEND", max_length=255)
+    service_now_group: str = Field(..., alias="serviceNowGroup", description="ServiceNow group responsible", min_length=1, max_length=255)
+    incident_id: str = Field(..., alias="incidentId", description="ServiceNow incident ID", min_length=1, max_length=255)
+    severity: SeverityEnum = Field(..., description="Severity level of the ABEND")
+
+
+class CreateAbendResponse(BaseModel):
+    """Response model for ABEND creation."""
+    tracking_id: str = Field(..., alias="trackingID", description="Generated tracking ID for the ABEND")
+    job_name: str = Field(..., alias="jobName", description="Job name")
+    adr_status: ADRStatusEnum = Field(..., alias="adrStatus", description="Initial ADR status")
+    severity: SeverityEnum = Field(..., description="Severity level")
+    abended_at: datetime = Field(..., alias="abendedAt", description="ABEND occurrence timestamp")
+    created_at: datetime = Field(..., alias="createdAt", description="Record creation timestamp")
     message: str = Field(..., description="Success message")
