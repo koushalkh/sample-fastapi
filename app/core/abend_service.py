@@ -108,6 +108,7 @@ class AbendService:
         """
         Create a new ABEND record via internal API.
         Generates unique tracking ID and initializes with ABEND_REGISTERED status.
+        Creates an audit log entry for tracking the ABEND creation.
         """
         try:
 
@@ -125,6 +126,30 @@ class AbendService:
                 incident_id=request.incident_id,
                 order_id=request.order_id
             )
+            
+            # Create audit log entry for ABEND creation (Option A: Synchronous)
+            try:
+                audit_request = CreateAuditLogRequest(
+                    trackingID=abend_details.tracking_id,
+                    level=AuditLevelEnum.INFO,
+                    adrStatus=ADRStatusEnum.ABEND_REGISTERED,
+                    message=f"ABEND record created for job '{abend_details.job_name}'",
+                    description=f"New ABEND record created with severity '{abend_details.severity}', incident ID '{request.incident_id}', and initial status '{abend_details.adr_status}'",
+                    createdBy="system"
+                )
+                
+                await self.create_audit_log(audit_request)
+                
+                self.logger.info("Audit log created for ABEND creation",
+                               tracking_id=abend_details.tracking_id,
+                               job_name=abend_details.job_name)
+                               
+            except Exception as audit_error:
+                # Log audit failure but don't fail the main ABEND creation
+                self.logger.warning("Failed to create audit log for ABEND creation",
+                                  tracking_id=abend_details.tracking_id,
+                                  job_name=abend_details.job_name,
+                                  audit_error=str(audit_error))
             
             # Return success response
             return CreateAbendResponse(
