@@ -35,6 +35,14 @@ class AIRemediationApprovalStatusEnum(str, Enum):
     REJECTED = "REJECTED"
 
 
+class AuditLevelEnum(str, Enum):
+    """Audit log level values."""
+    INFO = "INFO"
+    WARN = "WARN"
+    ERROR = "ERROR"
+    DEBUG = "DEBUG"
+
+
 class EmailMetadata(BaseModel):
     """Email metadata for ABEND notifications."""
     subject: Optional[str] = None
@@ -369,3 +377,43 @@ class CreateAbendResponse(BaseModel):
     abended_at: datetime = Field(..., alias="abendedAt", description="ABEND occurrence timestamp")
     created_at: datetime = Field(..., alias="createdAt", description="Record creation timestamp")
     message: str = Field(..., description="Success message")
+
+
+# Audit Log Models
+class AuditLogModel(BaseModel):
+    """Audit log model for tracking state changes and operations."""
+    tracking_id: str = Field(..., alias="trackingID", description="Parent tracking ID")
+    audit_id: str = Field(..., alias="auditID", description="Unique audit log ID")
+    level: AuditLevelEnum = Field(..., description="Audit log level")
+    adr_status: ADRStatusEnum = Field(..., alias="adrStatus", description="ADR status (using adr_status field)")
+    message: str = Field(..., description="Short audit message")
+    description: str = Field(..., description="Detailed audit description")
+    created_at: datetime = Field(..., alias="createdAt", description="Audit log creation timestamp")
+    created_by: str = Field(..., alias="createdBy", description="Who created this audit log")
+
+
+class CreateAuditLogRequest(BaseModel):
+    """Request model for creating an audit log entry."""
+    tracking_id: str = Field(..., alias="trackingID", description="Parent tracking ID", min_length=1)
+    level: AuditLevelEnum = Field(..., description="Audit log level")
+    adr_status: ADRStatusEnum = Field(..., alias="adrStatus", description="ADR status being logged")
+    message: str = Field(..., description="Short audit message", min_length=1, max_length=500)
+    description: str = Field(..., description="Detailed audit description", min_length=1, max_length=2000)
+    created_by: Optional[str] = Field("system", alias="createdBy", description="Who created this audit log")
+
+
+class CreateAuditLogResponse(BaseModel):
+    """Response model for audit log creation."""
+    audit_id: str = Field(..., alias="auditID", description="Generated audit log ID")
+    tracking_id: str = Field(..., alias="trackingID", description="Parent tracking ID")
+    level: AuditLevelEnum = Field(..., description="Audit log level")
+    adr_status: ADRStatusEnum = Field(..., alias="adrStatus", description="ADR status being logged")
+    created_at: datetime = Field(..., alias="createdAt", description="Audit log creation timestamp")
+    message: str = Field(..., description="Success message")
+
+
+class GetAuditLogsResponse(BaseModel):
+    """Response model for getting audit logs."""
+    tracking_id: str = Field(..., alias="trackingID", description="Parent tracking ID")
+    audit_logs: List[AuditLogModel] = Field(..., alias="auditLogs", description="List of audit logs")
+    total_count: int = Field(..., alias="totalCount", description="Total number of audit logs for this tracking ID")

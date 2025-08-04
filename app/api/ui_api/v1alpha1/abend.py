@@ -16,6 +16,7 @@ from app.models.abend import (
     JobLogsResponse,
     AIRecommendationApprovalRequest,
     AIRecommendationApprovalResponse,
+    GetAuditLogsResponse,
 )
 from app.models.generic_responses import ErrorResponse
 from app.core.abend_service import abend_service
@@ -299,4 +300,89 @@ async def get_job_history_trends(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error occurred while retrieving job history trends"
+        )
+
+
+@router.get(
+    "/{tracking_id}/audit-logs",
+    response_model=GetAuditLogsResponse,
+    responses={
+        400: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+    summary="Get Audit Logs for ABEND",
+    description="Retrieve all audit logs for a specific ABEND tracking ID.",
+)
+async def get_audit_logs_for_tracking_id(
+    tracking_id: str = Path(..., description="ABEND tracking ID", min_length=1)
+) -> GetAuditLogsResponse:
+    """
+    Get all audit logs for a specific ABEND tracking ID.
+    
+    This endpoint retrieves the complete audit trail for an ABEND record, showing:
+    - State transitions and status changes
+    - System actions and interventions
+    - Error conditions and resolutions
+    - Chronological order of events
+    
+    Args:
+        tracking_id: The ABEND tracking ID (e.g., "ABEND_JOBNAME_01K1T5TP0RX6...")
+    
+    Returns:
+        GetAuditLogsResponse: Complete audit trail with metadata
+        
+    Raises:
+        400: Invalid tracking ID format
+        404: Tracking ID not found or no audit logs exist
+        500: Internal server error
+    
+    Example:
+        GET /ui-api/v1alpha1/abends/ABEND_CLAIMS_01K1T5TP0RX6.../audit-logs
+    """
+    try:
+        # Validate tracking ID format
+        if not tracking_id.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Tracking ID cannot be empty"
+            )
+        
+        # Clean and validate tracking ID
+        tracking_id = tracking_id.strip()
+        if len(tracking_id) < 10:  # Basic validation - should be longer
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid tracking ID format"
+            )
+        
+        logger.info("Getting audit logs via UI API", tracking_id=tracking_id)
+        
+        # Get audit logs via service layer
+        result = await abend_service.get_audit_logs(tracking_id)
+        
+        # Check if any audit logs were found
+        if not result.audit_logs:
+            logger.warning("No audit logs found for tracking ID", tracking_id=tracking_id)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No audit logs found for tracking ID: {tracking_id}"
+            )
+        
+        logger.info("Successfully retrieved audit logs via UI API", 
+                   tracking_id=tracking_id,
+                   count=len(result.audit_logs))
+        
+        return result
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions (400, 404, etc.)
+        raise
+    except Exception as e:
+        logger.error("Error in get_audit_logs_for_tracking_id API", 
+                    tracking_id=tracking_id, 
+                    error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error occurred while retrieving audit logs"
         )

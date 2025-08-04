@@ -31,7 +31,9 @@ from app.models.abend import (
     AbendModel, 
     AbendDetailsModel, 
     ADRStatusEnum, 
-    SeverityEnum
+    SeverityEnum,
+    AuditLogModel,
+    AuditLevelEnum
 )
 
 logger = get_logger(__name__)
@@ -860,3 +862,144 @@ def _convert_to_abend_details_model(record) -> AbendDetailsModel:
         updatedBy=getattr(record, 'updated_by', 'system'),
         generation=getattr(record, 'generation', 1)
     )
+
+
+# Audit Log Functions
+def create_audit_log(
+    tracking_id: str,
+    level: AuditLevelEnum,
+    adr_status: ADRStatusEnum,
+    message: str,
+    description: str,
+    created_by: str = "system"
+) -> AuditLogModel:
+    """
+    Create an audit log entry for a tracking ID.
+    
+    Args:
+        tracking_id: Parent tracking ID to audit
+        level: Audit log level (INFO, WARN, ERROR, DEBUG)
+        adr_status: ADR status being logged
+        message: Short audit message
+        description: Detailed audit description
+        created_by: Who created this audit log
+        
+    Returns:
+        AuditLogModel with the created audit log details
+        
+    Raises:
+        Exception if creation fails
+    """
+    audit_id = AbendDynamoTable.generate_audit_log_id()
+    
+    logger.info("Creating audit log entry",
+                audit_id=audit_id,
+                tracking_id=tracking_id,
+                level=level,
+                adr_status=adr_status,
+                message=message)
+    
+    try:
+        now = datetime.now(timezone.utc)
+        
+        # Create new audit log record with correct primary key design
+        audit_record = AbendDynamoTable(
+            # Primary key - tracking_id (hash) + audit_id (range)
+            tracking_id=tracking_id,  # Hash key
+            record_type=audit_id,     # Range key - using audit_id
+            
+            # Audit log specific data
+            audit_id=audit_id,
+            audit_level=level.value,
+            adr_status=adr_status.value,  # Use adr_status field
+            audit_message=message,
+            audit_description=description,
+            
+            # Standard fields
+            created_at=now,
+            updated_at=now,
+            created_by=created_by,
+            updated_by=created_by,
+            generation=1
+        )
+        
+        # Save to DynamoDB
+        audit_record.save()
+        
+        logger.info("Successfully created audit log entry",
+                   audit_id=audit_id,
+                   tracking_id=tracking_id,
+                   level=level,
+                   adr_status=adr_status)
+        
+        # Convert to model and return
+        return AuditLogModel(
+            trackingID=tracking_id,
+            auditID=audit_id,
+            level=level,
+            adrStatus=adr_status,  # Use adrStatus field (maps to adr_status in schema)
+            message=message,
+            description=description,
+            createdAt=now,
+            createdBy=created_by
+        )
+        
+    except Exception as e:
+        logger.error("Error creating audit log entry",
+                    audit_id=audit_id,
+                    tracking_id=tracking_id,
+                    error=str(e))
+        raise
+
+
+def get_audit_logs_by_tracking_id(tracking_id: str) -> List[AuditLogModel]:
+    """
+    Get all audit logs for a tracking ID.
+    
+    ACCESS PATTERN: Optimized for audit log retrieval
+    OPTIMIZATION: AuditLogsIndex query by tracking_id
+    PERFORMANCE: 1-3 RCU depending on number of audit logs
+    
+    Args:
+        tracking_id: Parent tracking ID to get audit logs for
+        
+    Returns:
+        List of AuditLogModel sorted by creation time (chronological order)
+        
+    Raises:
+        Exception if query fails
+    """
+    try:
+        logger.info("Getting audit logs for tracking ID", tracking_id=tracking_id)
+        
+        # Query AuditLogsIndex for all audit logs for this tracking_id
+        results = AbendDynamoTable.audit_logs_index.query(
+            hash_key=tracking_id,
+            scan_index_forward=True  # Chronological order (oldest first)
+        )
+        
+        audit_logs = []
+        for record in results:
+            # Convert audit log record to model
+            audit_logs.append(AuditLogModel(
+                trackingID=tracking_id,
+                auditID=record.audit_id,  # Use audit_id field directly
+                level=AuditLevelEnum(record.audit_level),
+                adrStatus=ADRStatusEnum(record.adr_status),  # Use adr_status field
+                message=record.audit_message,
+                description=record.audit_description,
+                createdAt=record.created_at,
+                createdBy=record.created_by
+            ))
+        
+        logger.info("Retrieved audit logs",
+                   tracking_id=tracking_id,
+                   count=len(audit_logs))
+        
+        return audit_logs
+        
+    except Exception as e:
+        logger.error("Error getting audit logs",
+                    tracking_id=tracking_id,
+                    error=str(e))
+        raise

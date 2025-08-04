@@ -86,6 +86,33 @@ class JobHistoryIndex(GlobalSecondaryIndex):
     abended_at = UnicodeAttribute(range_key=True, attr_name="abended_at")
 
 
+class AuditLogsIndex(GlobalSecondaryIndex):
+    """
+    Dedicated GSI for audit log queries.
+    
+    Optimized for:
+    - Get all audit logs for a tracking_id
+    - Chronological ordering of audit events
+    - Efficient audit trail retrieval
+    
+    Key Design:
+    - Hash Key: tracking_id (groups audit logs by tracking ID)
+    - Range Key: audit_id (allows multiple audit logs per tracking ID)
+    """
+    
+    class Meta:
+        index_name = "AuditLogsIndex"
+        projection = AllProjection()
+        read_capacity_units = 1
+        write_capacity_units = 1
+    
+    # Hash key: tracking_id for grouping audit logs
+    tracking_id = UnicodeAttribute(hash_key=True, attr_name="trackingID")
+    
+    # Range key: audit_id for unique identification within a tracking ID
+    audit_id = UnicodeAttribute(range_key=True, attr_name="auditID")
+
+
 class AbendDynamoTable(Model):
     """
     Optimized ABEND record schema with strategic GSI design.
@@ -117,8 +144,8 @@ class AbendDynamoTable(Model):
     record_type = UnicodeAttribute(range_key=True, default="ABEND")
     
     # GSI Key Attributes (matching DynamoDB schema)
-    abended_date = UnicodeAttribute(attr_name="abended_date")  # YYYY-MM-DD format for AbendedDateIndex
-    abended_at = UnicodeAttribute(attr_name="abended_at")  # String timestamp for both GSIs
+    abended_date = UnicodeAttribute(attr_name="abended_date", null=True)  # YYYY-MM-DD format for AbendedDateIndex
+    abended_at = UnicodeAttribute(attr_name="abended_at", null=True)  # String timestamp for both GSIs - nullable for audit logs
     job_id = UnicodeAttribute(attr_name="job_id", null=True)  # Standard job identifier - optional
     
     # Basic job information (matching main schema)
@@ -134,9 +161,9 @@ class AbendDynamoTable(Model):
     abend_return_code = UnicodeAttribute(attr_name="abendReturnCode", null=True)
     abend_reason = UnicodeAttribute(attr_name="abendReason", null=True)
     
-    # Status and severity (used for filtering)
-    adr_status = UnicodeAttribute(attr_name="adrStatus")
-    severity = UnicodeAttribute(attr_name="severity")
+    # Status and Severity (matching DynamoDB schema)
+    adr_status = UnicodeAttribute(attr_name="adrStatus", null=True)  # Nullable for audit logs (reused for audit_status)
+    severity = UnicodeAttribute(attr_name="severity", null=True)  # Nullable for audit logs
 
     # Performance metrics (flattened, matching main schema)
     perf_log_extraction_time = UnicodeAttribute(attr_name="perfLogExtractionTime", null=True)
@@ -158,6 +185,12 @@ class AbendDynamoTable(Model):
     updated_by = UnicodeAttribute(attr_name="updatedBy", default="system")
     generation = NumberAttribute(attr_name="generation", default=1)
 
+    # Audit log specific attributes (only populated for AUDIT_LOG records)
+    audit_id = UnicodeAttribute(attr_name="auditID", null=True)  # Unique audit log ID for range key
+    audit_level = UnicodeAttribute(attr_name="auditLevel", null=True)
+    audit_message = UnicodeAttribute(attr_name="auditMessage", null=True)
+    audit_description = UnicodeAttribute(attr_name="auditDescription", null=True)
+
     # Timestamp fields (matching main schema)
     created_at = UTCDateTimeAttribute(
         default=lambda: datetime.now(timezone.utc), attr_name="createdAt"
@@ -169,6 +202,7 @@ class AbendDynamoTable(Model):
     # GSI Definitions
     abended_date_index = AbendedDateIndex()
     job_history_index = JobHistoryIndex()
+    audit_logs_index = AuditLogsIndex()
     
 
     def save(self, **kwargs):
@@ -181,21 +215,37 @@ class AbendDynamoTable(Model):
             self.created_at = now
             self._created_at_set = True
         
-        # Ensure abended_date is properly formatted
-        if hasattr(self, 'abended_at') and self.abended_at and not self.abended_date:
-            # Convert datetime to date string if abended_at is datetime
-            if isinstance(self.abended_at, datetime):
-                self.abended_date = self.abended_at.strftime("%Y-%m-%d")
-                # Convert datetime to ISO string for storage
-                self.abended_at = self.abended_at.isoformat()
-            elif isinstance(self.abended_at, str):
-                # Parse ISO string to extract date
-                try:
-                    dt = datetime.fromisoformat(self.abended_at.replace('Z', '+00:00'))
-                    self.abended_date = dt.strftime("%Y-%m-%d")
-                except:
-                    # Fallback to today's date
-                    self.abended_date = now.strftime("%Y-%m-%d")
+        # Handle record type specific logic
+        if self.record_type == "AUDIT_LOG":
+            # For audit logs, don't populate ABEND-specific fields
+            # Set ABEND-specific fields to None to avoid GSI indexing
+            self.abended_date = None
+            self.abended_at = None
+            self.job_name = None
+            self.severity = None  # Not used for audit logs
+                
+        elif self.record_type == "ABEND":
+            # Existing ABEND logic for GSI keys
+            # Ensure abended_date is properly formatted
+            if hasattr(self, 'abended_at') and self.abended_at and not self.abended_date:
+                # Convert datetime to date string if abended_at is datetime
+                if isinstance(self.abended_at, datetime):
+                    self.abended_date = self.abended_at.strftime("%Y-%m-%d")
+                    # Convert datetime to ISO string for storage
+                    self.abended_at = self.abended_at.isoformat()
+                elif isinstance(self.abended_at, str):
+                    # Parse ISO string to extract date
+                    try:
+                        dt = datetime.fromisoformat(self.abended_at.replace('Z', '+00:00'))
+                        self.abended_date = dt.strftime("%Y-%m-%d")
+                    except:
+                        # Fallback to today's date
+                        self.abended_date = now.strftime("%Y-%m-%d")
+            
+            # Clear audit-specific attributes for ABEND records
+            self.audit_level = None
+            self.audit_message = None
+            self.audit_description = None
         
         # Set default record type
         if not self.record_type:
@@ -359,3 +409,43 @@ class AbendDynamoTable(Model):
     def get_remediation_metadata(self) -> Optional[Dict[str, Any]]:
         """Get remediation metadata as dictionary."""
         return self.remediation_metadata
+    
+    # Audit log helper methods
+    @classmethod
+    def generate_audit_log_id(cls) -> str:
+        """
+        Generate audit log ID using the format: AUDIT_{ulid}
+        
+        Returns:
+            Formatted audit log ID with auto-generated ULID
+        """
+        return f"AUDIT_{ulid.ulid()}"
+    
+    def set_audit_data(self, level: str, message: str, description: str, adr_status: str) -> None:
+        """Set audit log specific data."""
+        self.audit_level = level
+        self.audit_message = message
+        self.audit_description = description
+        self.adr_status = adr_status  # Use adr_status field consistently
+        self.record_type = "AUDIT_LOG"
+        
+        # Generate audit_id if not already set
+        if not self.audit_id:
+            self.audit_id = self.generate_audit_log_id()
+        
+        # Generate audit_id if not already set
+        if not self.audit_id:
+            self.audit_id = self.generate_audit_log_id()
+    
+    def get_audit_data(self) -> Optional[Dict[str, Any]]:
+        """Get audit log data as dictionary."""
+        if self.record_type != "AUDIT_LOG":
+            return None
+        
+        return {
+            'level': self.audit_level,
+            'message': self.audit_message,
+            'description': self.audit_description,
+            'adr_status': self.adr_status,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }

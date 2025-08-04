@@ -22,6 +22,11 @@ from app.models.abend import (
     CreateAbendResponse,
     ADRStatusEnum,
     SeverityEnum,
+    AuditLogModel,
+    AuditLevelEnum,
+    CreateAuditLogRequest,
+    CreateAuditLogResponse,
+    GetAuditLogsResponse,
 )
 from app.dal import abend_repository
 from app.utils.pagination import encode_cursor
@@ -356,6 +361,83 @@ Generated at: {datetime.now(timezone.utc).isoformat()}
 [ERROR] Rolling back transaction
 [ERROR] Job abended with return code: 8
 """.strip()
+
+    # Audit Log Methods
+    async def create_audit_log(self, request: CreateAuditLogRequest) -> CreateAuditLogResponse:
+        """
+        Create an audit log entry for tracking state changes and operations.
+        
+        Args:
+            request: CreateAuditLogRequest with audit log details
+            
+        Returns:
+            CreateAuditLogResponse with created audit log information
+            
+        Raises:
+            Exception if creation fails
+        """
+        try:
+            self.logger.info("Creating audit log", 
+                           tracking_id=request.tracking_id,
+                           level=request.level,
+                           adr_status=request.adr_status,
+                           message=request.message)
+            
+            # Create audit log via DAL
+            audit_log = abend_repository.create_audit_log(
+                tracking_id=request.tracking_id,
+                level=request.level,
+                adr_status=request.adr_status,  # Use adr_status parameter
+                message=request.message,
+                description=request.description,
+                created_by=request.created_by or "system"
+            )
+            
+            return CreateAuditLogResponse(
+                auditID=audit_log.audit_id,
+                trackingID=audit_log.tracking_id,
+                level=audit_log.level,
+                adrStatus=audit_log.adr_status,
+                createdAt=audit_log.created_at,
+                message="Audit log created successfully"
+            )
+            
+        except Exception as e:
+            self.logger.error("Error creating audit log", 
+                            tracking_id=request.tracking_id,
+                            error=str(e))
+            raise
+
+    async def get_audit_logs(self, tracking_id: str) -> GetAuditLogsResponse:
+        """
+        Get all audit logs for a specific tracking ID.
+        
+        Args:
+            tracking_id: The tracking ID to get audit logs for
+            
+        Returns:
+            GetAuditLogsResponse with list of audit logs
+            
+        Raises:
+            Exception if retrieval fails
+        """
+        try:
+            self.logger.info("Getting audit logs", tracking_id=tracking_id)
+            
+            # Get audit logs via DAL
+            audit_logs = abend_repository.get_audit_logs_by_tracking_id(tracking_id)
+            
+            return GetAuditLogsResponse(
+                trackingID=tracking_id,
+                auditLogs=audit_logs,
+                totalCount=len(audit_logs)
+            )
+            
+        except Exception as e:
+            self.logger.error("Error getting audit logs", 
+                            tracking_id=tracking_id,
+                            error=str(e))
+            raise
 
 
 # Global service instance
