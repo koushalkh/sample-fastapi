@@ -16,7 +16,7 @@ class Settings:
     def __init__(self) -> None:
         self.logger = get_logger(__name__)
         self.app_name = os.getenv("APP_NAME", "BAM")
-        self.environment = os.getenv("ENVIRONMENT", "development")
+        self.environment = os.getenv("ENVIRONMENT", "dev")
         self.debug = os.getenv("DEBUG", "false").lower() == "true"
 
         # ADR Environment Configuration
@@ -36,6 +36,10 @@ class Settings:
         self.s3_abend_log_inbound_path = os.getenv("S3_ABEND_LOG_INBOUND_PATH", "raw-logs")
         self.s3_abend_log_processed_bucket = os.getenv("S3_ABEND_LOG_PROCESSED_BUCKET", "abend-logs-processed")
         self.s3_abend_log_processed_path = os.getenv("S3_ABEND_LOG_PROCESSED_PATH", "processed-logs")
+
+        # Middleware Configuration
+        self.cors_origins = os.getenv("CORS_ORIGINS", "")
+        self.slow_request_threshold_ms = float(os.getenv("SLOW_REQUEST_THRESHOLD_MS", "1000"))
 
         # Initialize boto3 clients as None (lazy initialization)
         self._dynamodb_client: Optional[Any] = None
