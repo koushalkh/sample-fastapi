@@ -19,6 +19,21 @@ A production-ready FastAPI microservice for managing ABEND  records and SOPs (St
 - Docker (optional, for containerized deployment)
 - uv package manager (recommended) or pip
 
+### Installation
+
+Install the project with development dependencies:
+
+```bash
+# Using uv (recommended)
+uv sync --group dev
+
+# Or using pip
+pip install -e ".[dev]"
+
+# For auto-fix tools specifically
+pip install autoflake autopep8
+```
+
 ### Running Locally
 
 1. **Clone and navigate to the repository**
@@ -201,6 +216,92 @@ Key environment variables supported:
 ### Testing
 
 *Testing framework setup is planned for future iterations.*
+
+### Code Quality and Formatting
+
+The project includes comprehensive code quality tools and auto-fixing capabilities.
+
+#### Available Commands
+
+The project includes predefined scripts in `pyproject.toml` under `[tool.scripts]` for common development tasks:
+
+**Basic Commands:**
+```bash
+# Format code with Black and sort imports with isort
+black app && isort app
+
+# Check linting with proper line length
+flake8 app --max-line-length=88
+
+# Type checking
+mypy app
+
+# Run tests with coverage
+pytest --cov=app --cov-report=term-missing
+```
+
+**Auto-fix Commands:**
+```bash
+# Remove unused imports and variables
+autoflake --in-place --remove-all-unused-imports --remove-unused-variables app
+
+# Fix PEP8 style issues automatically
+autopep8 --in-place --max-line-length=88 --aggressive --aggressive app
+
+# Combined format and import cleanup
+black app && isort app && autoflake --in-place --remove-all-unused-imports --remove-unused-variables app
+```
+
+**Combined Workflows:**
+```bash
+# Complete formatting and auto-fix workflow  
+black app && isort app && autoflake --in-place --remove-all-unused-imports --remove-unused-variables app && autopep8 --in-place --max-line-length=88 --aggressive --aggressive app
+
+# Check all issues after fixes
+flake8 app --max-line-length=88 && mypy app
+
+# Full development workflow (fix + check + test)
+black app && isort app && autoflake --in-place --remove-all-unused-imports --remove-unused-variables app && flake8 app --max-line-length=88 && mypy app && pytest --cov=app --cov-report=term-missing
+```
+
+**For Individual Files:**
+```bash
+# Format a specific file
+black [filename] && isort [filename]
+
+# Fix a specific file
+black [filename] && isort [filename] && autoflake --in-place --remove-all-unused-imports [filename]
+```
+
+#### Tool Configuration
+
+All tools are configured in `pyproject.toml`:
+- **Black**: 88 character line length, Python 3.11+ target
+- **isort**: Black-compatible import sorting
+- **flake8**: 88 character line length, specific error codes
+- **mypy**: Strict type checking with AWS library stubs
+
+#### Development Workflow
+
+1. **Before committing:**
+   ```bash
+   # Auto-fix common issues
+   black app && isort app && autoflake --in-place --remove-all-unused-imports --remove-unused-variables app
+   
+   # Check remaining issues  
+   flake8 app --max-line-length=88
+   mypy app
+   ```
+
+2. **Quick fixes for specific issues:**
+   - Line length violations: `autopep8 --in-place --max-line-length=88 --aggressive --aggressive [file]`
+   - Unused imports: `autoflake --in-place --remove-all-unused-imports [file]`
+   - Format single file: `black [file] && isort [file]`
+
+3. **Run tests:**
+   ```bash
+   pytest --cov=app --cov-report=term-missing
+   ```
 
 ### Logging
 

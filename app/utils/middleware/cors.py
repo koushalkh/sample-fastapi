@@ -5,11 +5,12 @@ Handles Cross-Origin Resource Sharing configuration based on environment variabl
 """
 
 from typing import List
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware as FastAPICORSMiddleware
 from structlog import get_logger
 
-from .constants import DEFAULT_CORS_ORIGINS, CORS_METHODS, CORS_HEADERS
+from .constants import CORS_HEADERS, CORS_METHODS, DEFAULT_CORS_ORIGINS
 
 logger = get_logger(__name__)
 
@@ -17,17 +18,21 @@ logger = get_logger(__name__)
 def get_cors_origins(cors_origins_config: str = "") -> List[str]:
     """
     Get CORS origins from configuration or use defaults.
-    
+
     Args:
         cors_origins_config: Comma-separated list of origins from settings
         Example: "https://app.company.com,https://staging.company.com"
-    
+
     Returns:
         List of allowed CORS origins
     """
     if cors_origins_config:
         # Parse comma-separated origins and strip whitespace
-        origins = [origin.strip() for origin in cors_origins_config.split(",") if origin.strip()]
+        origins = [
+            origin.strip()
+            for origin in cors_origins_config.split(",")
+            if origin.strip()
+        ]
         logger.info("Using CORS origins from configuration", origins=origins)
         return origins
     else:
@@ -38,13 +43,13 @@ def get_cors_origins(cors_origins_config: str = "") -> List[str]:
 def setup_cors_middleware(app: FastAPI, cors_origins_config: str = "") -> None:
     """
     Set up CORS middleware for the FastAPI application.
-    
+
     Args:
         app: FastAPI application instance
         cors_origins_config: CORS origins configuration from settings
     """
     origins = get_cors_origins(cors_origins_config)
-    
+
     app.add_middleware(
         FastAPICORSMiddleware,
         allow_origins=origins,
@@ -53,16 +58,18 @@ def setup_cors_middleware(app: FastAPI, cors_origins_config: str = "") -> None:
         allow_headers=CORS_HEADERS,
         expose_headers=[
             "X-Correlation-ID",
-            "X-Request-ID", 
+            "X-Request-ID",
             "X-Response-Time",
             "X-Total-Count",  # For pagination
-        ]
+        ],
     )
-    
-    logger.info("CORS middleware configured", 
-                origins=origins,
-                methods=CORS_METHODS,
-                allow_credentials=True)
+
+    logger.info(
+        "CORS middleware configured",
+        origins=origins,
+        methods=CORS_METHODS,
+        allow_credentials=True,
+    )
 
 
 # For backward compatibility, export the setup function as CORSMiddleware

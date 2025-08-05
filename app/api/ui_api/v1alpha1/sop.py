@@ -1,15 +1,11 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from starlette import status
 from structlog import get_logger
 
 from app.api import tags
-from app.models.generic_responses import GenericResponse
-from app.models.sop import (
-    GetSOPsFilter,
-    GetSOPsResponse,
-    SOPDetailsResponse
-)
 from app.core.sop_service import sop_service
+from app.models.generic_responses import GenericResponse
+from app.models.sop import GetSOPsFilter, GetSOPsResponse, SOPDetailsResponse
 
 # Create the router
 router = APIRouter()
@@ -23,7 +19,7 @@ logger = get_logger(__name__)
     response_model=GetSOPsResponse,
     responses={
         status.HTTP_400_BAD_REQUEST: {"model": GenericResponse},
-        status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": GenericResponse}
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": GenericResponse},
     },
     tags=[tags.UI_SOP_V1ALPHA1.display_name],
 )
@@ -37,7 +33,7 @@ async def get_sops_for_ui(filters: GetSOPsFilter = Depends()) -> GetSOPsResponse
         logger.error("Failed to get SOPs for UI", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve SOP records"
+            detail="Failed to retrieve SOP records",
         )
 
 
@@ -58,7 +54,7 @@ async def get_sop_for_ui(sop_id: str) -> SOPDetailsResponse:
         if not sop_details:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"SOP record with ID '{sop_id}' not found"
+                detail=f"SOP record with ID '{sop_id}' not found",
             )
         return sop_details
     except HTTPException:
@@ -67,5 +63,5 @@ async def get_sop_for_ui(sop_id: str) -> SOPDetailsResponse:
         logger.error("Failed to get SOP details for UI", sop_id=sop_id, error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve SOP details"
+            detail="Failed to retrieve SOP details",
         )

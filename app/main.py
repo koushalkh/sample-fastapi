@@ -3,22 +3,22 @@ import os
 
 import uvicorn
 from fastapi import FastAPI
-from structlog import get_logger
 from pydantic import ValidationError
 from pydantic_core import ValidationError as PydanticCoreValidationError
+from structlog import get_logger
 
 from app.api import route_management, tags
 from app.api.exception_handlers import (
+    pydantic_core_validation_exception_handler,
     validation_exception_handler,
-    pydantic_core_validation_exception_handler
 )
-from app.core.logger import struct_logger
 from app.core.config import settings
+from app.core.logger import struct_logger
 from app.utils.middleware import (
     setup_cors_middleware,
-    setup_security_headers_middleware,
     setup_request_logging_middleware,
     setup_response_time_middleware,
+    setup_security_headers_middleware,
 )
 
 struct_logger.setup_logging()
@@ -28,26 +28,30 @@ logger = get_logger()
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application"""
     app = FastAPI()
-    
+
     # Setup middleware in order (important: order matters for middleware stack)
     # 1. Response time tracking (outermost - measures total time)
-    setup_response_time_middleware(app, slow_threshold_ms=settings.slow_request_threshold_ms)
-    
+    setup_response_time_middleware(
+        app, slow_threshold_ms=settings.slow_request_threshold_ms
+    )
+
     # 2. Request logging with correlation IDs
     setup_request_logging_middleware(app)
-    
+
     # 3. Security headers
     if not settings.is_local_env:
         setup_security_headers_middleware(app, add_csp=True)
-    
+
     # 4. CORS (should be after security headers)
     setup_cors_middleware(app, cors_origins_config=settings.cors_origins)
-    
+
     logger.info("All middleware configured successfully")
 
     # Add global exception handlers for Pydantic validation errors
     app.add_exception_handler(ValidationError, validation_exception_handler)
-    app.add_exception_handler(PydanticCoreValidationError, pydantic_core_validation_exception_handler)
+    app.add_exception_handler(
+        PydanticCoreValidationError, pydantic_core_validation_exception_handler
+    )
 
     # Initialize routes based on API_MODE environment variable or default to ALL
     api_mode = os.getenv("API_MODE", "ALL")

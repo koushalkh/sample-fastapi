@@ -9,14 +9,14 @@ This module contains all middleware components for production-ready features:
 """
 
 from .cors import setup_cors_middleware
-from .security import SecurityHeadersMiddleware, setup_security_headers_middleware
 from .logging import RequestLoggingMiddleware, setup_request_logging_middleware
 from .monitoring import ResponseTimeMiddleware, setup_response_time_middleware
+from .security import SecurityHeadersMiddleware, setup_security_headers_middleware
 
 __all__ = [
     "setup_cors_middleware",
     "SecurityHeadersMiddleware",
-    "setup_security_headers_middleware", 
+    "setup_security_headers_middleware",
     "RequestLoggingMiddleware",
     "setup_request_logging_middleware",
     "ResponseTimeMiddleware",

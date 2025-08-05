@@ -11,7 +11,9 @@ router = APIRouter()
     summary="Health check to verify service is running.",
     description="Health check to verify service is running.",
     response_model=generic_responses.GenericResponse,
-    responses={HTTP_500_INTERNAL_SERVER_ERROR: {"model": generic_responses.GenericResponse}},
+    responses={
+        HTTP_500_INTERNAL_SERVER_ERROR: {"model": generic_responses.GenericResponse}
+    },
 )
 def healthz() -> generic_responses.GenericResponse:
     """

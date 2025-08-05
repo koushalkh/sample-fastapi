@@ -9,10 +9,10 @@ SESSION_COOKIE_SECURE = True  # Set to True in production
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "lax"
 
-# Security Headers Constants  
+# Security Headers Constants
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY", 
+    "X-Frame-Options": "DENY",
     "X-XSS-Protection": "1; mode=block",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
@@ -37,14 +37,14 @@ CSP_POLICY = (
 # CORS Constants
 DEFAULT_CORS_ORIGINS = [
     "http://localhost:3000",  # React dev server
-    "http://localhost:8080",  # Vue dev server  
+    "http://localhost:8080",  # Vue dev server
     "http://localhost:4200",  # Angular dev server
 ]
 
 CORS_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
 CORS_HEADERS = [
     "accept",
-    "accept-encoding", 
+    "accept-encoding",
     "authorization",
     "content-type",
     "dnt",
@@ -63,7 +63,7 @@ RESPONSE_TIME_HEADER = "X-Response-Time"
 # Skip logging for these paths
 SKIP_LOGGING_PATHS = {
     "/healthz",
-    "/readyz", 
+    "/readyz",
     "/docs",
     "/redoc",
     "/openapi.json",

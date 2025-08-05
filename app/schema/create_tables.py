@@ -41,9 +41,7 @@ def create_sop_table() -> None:
     """Create the SOP DynamoDB table if it doesn't exist."""
     try:
         if not SOPDynamoTable.exists():
-            logger.info(
-                "Creating SOP table", table_name=SOPDynamoTable.Meta.table_name
-            )
+            logger.info("Creating SOP table", table_name=SOPDynamoTable.Meta.table_name)
             SOPDynamoTable.create_table(
                 read_capacity_units=1, write_capacity_units=1, wait=True
             )

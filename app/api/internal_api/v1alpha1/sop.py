@@ -1,17 +1,17 @@
+
 from fastapi import APIRouter, HTTPException, status
-from typing import Dict, Any, List
 from structlog import get_logger
 
 from app.api import tags
+from app.core.sop_service import sop_service
 from app.models.generic_responses import GenericResponse
 from app.models.sop import (
     CreateSOPRequest,
     CreateSOPResponse,
+    SOPDetailsResponse,
     UpdateSOPRequest,
     UpdateSOPResponse,
-    SOPDetailsResponse
 )
-from app.core.sop_service import sop_service
 
 # Create the router
 router = APIRouter()
@@ -25,7 +25,7 @@ logger = get_logger(__name__)
     response_model=CreateSOPResponse,
     responses={
         status.HTTP_400_BAD_REQUEST: {"model": GenericResponse},
-        status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": GenericResponse}
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": GenericResponse},
     },
     tags=[tags.INTERNAL_SOP_V1ALPHA1.display_name],
 )
@@ -39,7 +39,7 @@ async def create_sop(request: CreateSOPRequest) -> CreateSOPResponse:
         logger.error("Failed to create SOP", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create SOP record"
+            detail="Failed to create SOP record",
         )
 
 
@@ -50,7 +50,7 @@ async def create_sop(request: CreateSOPRequest) -> CreateSOPResponse:
     response_model=SOPDetailsResponse,
     responses={
         status.HTTP_404_NOT_FOUND: {"model": GenericResponse},
-        status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": GenericResponse}
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": GenericResponse},
     },
     tags=[tags.INTERNAL_SOP_V1ALPHA1.display_name],
 )
@@ -63,7 +63,7 @@ async def get_sop(sop_id: str) -> SOPDetailsResponse:
         if not sop_details:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"SOP record with ID '{sop_id}' not found"
+                detail=f"SOP record with ID '{sop_id}' not found",
             )
         return sop_details
     except HTTPException:
@@ -72,7 +72,7 @@ async def get_sop(sop_id: str) -> SOPDetailsResponse:
         logger.error("Failed to get SOP", sop_id=sop_id, error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve SOP record"
+            detail="Failed to retrieve SOP record",
         )
 
 
@@ -84,7 +84,7 @@ async def get_sop(sop_id: str) -> SOPDetailsResponse:
     responses={
         status.HTTP_404_NOT_FOUND: {"model": GenericResponse},
         status.HTTP_400_BAD_REQUEST: {"model": GenericResponse},
-        status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": GenericResponse}
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": GenericResponse},
     },
     tags=[tags.INTERNAL_SOP_V1ALPHA1.display_name],
 )
@@ -97,7 +97,7 @@ async def update_sop(sop_id: str, request: UpdateSOPRequest) -> UpdateSOPRespons
         if not update_response:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"SOP record with ID '{sop_id}' not found"
+                detail=f"SOP record with ID '{sop_id}' not found",
             )
         return update_response
     except HTTPException:
@@ -106,7 +106,7 @@ async def update_sop(sop_id: str, request: UpdateSOPRequest) -> UpdateSOPRespons
         logger.error("Failed to update SOP", sop_id=sop_id, error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update SOP record"
+            detail="Failed to update SOP record",
         )
 
 
@@ -117,7 +117,7 @@ async def update_sop(sop_id: str, request: UpdateSOPRequest) -> UpdateSOPRespons
     response_model=GenericResponse,
     responses={
         status.HTTP_404_NOT_FOUND: {"model": GenericResponse},
-        status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": GenericResponse}
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": GenericResponse},
     },
     tags=[tags.INTERNAL_SOP_V1ALPHA1.display_name],
 )
@@ -130,7 +130,7 @@ async def delete_sop(sop_id: str) -> GenericResponse:
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"SOP record with ID '{sop_id}' not found or deletion not yet implemented"
+                detail=f"SOP record with ID '{sop_id}' not found or deletion not yet implemented",
             )
         return GenericResponse(message=f"SOP record '{sop_id}' deleted successfully")
     except HTTPException:
@@ -139,7 +139,7 @@ async def delete_sop(sop_id: str) -> GenericResponse:
         logger.error("Failed to delete SOP", sop_id=sop_id, error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete SOP record"
+            detail="Failed to delete SOP record",
         )
 
 

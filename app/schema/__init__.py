@@ -4,8 +4,8 @@ All database table schemas are defined here using PynamoDB.
 """
 
 from .abend_dynamo import AbendDynamoTable
-from .sop_dynamo import SOPDynamoTable
 from .dynamo_config import DynamoDBConfig
+from .sop_dynamo import SOPDynamoTable
 
 __all__ = [
     "AbendDynamoTable",

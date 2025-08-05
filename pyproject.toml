@@ -44,6 +44,11 @@ dev = [
     "mypy>=1.6.0",
     "pre-commit>=3.5.0",
     
+    # Auto-fix Tools
+    "autoflake>=2.3.0",
+    "autopep8>=2.3.0",
+    "toml>=0.10.0",  # For script runner
+    
     # Development Tools
     "ipython>=8.16.0",
     "ipdb>=0.13.0",
@@ -72,18 +77,34 @@ local-dev = [
 ]
 
 [project.urls]
-Homepage = "TODO
+Homepage = "TODO"
 Repository = "TODO"
 Documentation = "TODO"
 
 [project.scripts]
 adr-service = "app.main:app"
 
-[tool.hatch.version]
-path = "app/__init__.py"
+# Development and code quality scripts
+[tool.scripts]
+# Basic formatting and linting
+format = "black app && isort app"
+lint = "flake8 app --max-line-length=88"
+type-check = "mypy app"
+test = "pytest --cov=app --cov-report=term-missing"
 
-[tool.hatch.build.targets.wheel]
-packages = ["app"]
+# Auto-fix commands
+fix-imports = "autoflake --in-place --remove-all-unused-imports --remove-unused-variables app"
+fix-style = "autopep8 --in-place --max-line-length=88 --aggressive --aggressive app"
+fix-format = "black app && isort app && autoflake --in-place --remove-all-unused-imports --remove-unused-variables app"
+
+# Combined workflows
+fix-all = "black app && isort app && autoflake --in-place --remove-all-unused-imports --remove-unused-variables app && autopep8 --in-place --max-line-length=88 --aggressive --aggressive app"
+check-all = "flake8 app --max-line-length=88 && mypy app"
+check = "black app && isort app && autoflake --in-place --remove-all-unused-imports --remove-unused-variables app && flake8 app --max-line-length=88 && mypy app && pytest --cov=app --cov-report=term-missing"
+
+# Individual file operations (use with filename as argument)
+format-file = "black {0} && isort {0}"
+fix-file = "black {0} && isort {0} && autoflake --in-place --remove-all-unused-imports {0}"
 
 # Development tools configuration
 [tool.black]
@@ -197,50 +218,6 @@ exclude = [
     "build",
     "dist",
     "*.egg-info",
-]
-
-# Environment configuration for different deployment scenarios
-[tool.hatch.envs.default]
-dependencies = [
-    "pytest",
-    "pytest-asyncio",
-    "pytest-cov",
-    "black",
-    "isort",
-    "flake8",
-    "mypy",
-]
-
-[tool.hatch.envs.default.scripts]
-test = "pytest {args:tests}"
-test-cov = "pytest --cov-report=term-missing --cov-config=pyproject.toml --cov=app {args:tests}"
-cov-report = ["test-cov", "coverage html"]
-type-check = "mypy app"
-format = ["black app", "isort app"]
-lint = ["flake8 app", "mypy app"]
-check = ["format", "lint", "test"]
-
-[tool.hatch.envs.production]
-dependencies = [
-    "gunicorn",
-]
-
-[tool.hatch.envs.production.scripts]
-serve = "gunicorn -w 4 -k uvicorn.workers.UvicornH11Worker app.main:app --bind 0.0.0.0:8000"
-serve-dev = "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
-
-# Docker build configuration
-[tool.hatch.build]
-exclude = [
-    "/.github",
-    "/docs",
-    "/tests",
-    "/scripts",
-    "/.venv",
-    "/common",
-    "*.md",
-    ".gitignore",
-    ".python-version",
 ]
 
 [tool.pyright]

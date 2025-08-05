@@ -4,23 +4,24 @@ This module provides versioned API endpoints for ABEND management.
 All business logic is delegated to the core service layer.
 """
 
-from typing import Dict, Any
-from fastapi import APIRouter, HTTPException, status, Depends, Path
+from typing import Any, Dict
 
+from fastapi import APIRouter, Depends, HTTPException, Path, status
+from structlog import get_logger
+
+from app.core.abend_service import abend_service
 from app.models.abend import (
-    GetAbendsFilter,
-    GetAbendsResponse,
     AbendDetailsResponse,
-    AvailableFiltersResponse,
-    TodayStatsResponse,
-    JobLogsResponse,
     AIRecommendationApprovalRequest,
     AIRecommendationApprovalResponse,
+    AvailableFiltersResponse,
+    GetAbendsFilter,
+    GetAbendsResponse,
     GetAuditLogsResponse,
+    JobLogsResponse,
+    TodayStatsResponse,
 )
 from app.models.generic_responses import ErrorResponse
-from app.core.abend_service import abend_service
-from structlog import get_logger
 
 logger = get_logger(__name__)
 
@@ -37,21 +38,19 @@ router = APIRouter(tags=["ABEND UI"])
     summary="Get ABEND Records",
     description="Retrieve ABEND records with pagination, filtering, and search capabilities.",
 )
-async def get_abends(
-    filters: GetAbendsFilter = Depends()
-) -> GetAbendsResponse:
+async def get_abends(filters: GetAbendsFilter = Depends()) -> GetAbendsResponse:
     """
     Get ABEND records with comprehensive filtering and pagination.
-    
+
     This endpoint uses cursor-based pagination for optimal performance:
-    
+
     **Cursor-based pagination:**
     - Use `limit` and `cursor` parameters
     - Efficient for large datasets with O(1) performance
     - Optimized for DynamoDB access patterns
     - Get `nextCursor` from response.meta for next page
     - Leave `cursor` empty for first page
-    
+
     **Other features:**
     - Search by job name (case-insensitive partial matching)
     - Filtering by domain area, severity, and date ranges
@@ -61,10 +60,8 @@ async def get_abends(
     # Delegate to service layer - all validation is handled by Pydantic in GetAbendsFilter
     # Pydantic validation errors are now handled by global exception handlers
     result = await abend_service.get_abends(filters)
-    
-    return result
-        
 
+    return result
 
 
 @router.get(
@@ -82,7 +79,7 @@ async def get_abend_details(
 ) -> AbendDetailsResponse:
     """
     Get detailed ABEND information by tracking ID.
-    
+
     Returns comprehensive details including:
     - Basic ABEND information
     - Remediation metadata
@@ -91,22 +88,24 @@ async def get_abend_details(
     """
     try:
         result = await abend_service.get_abend_details(tracking_id.strip())
-        
+
         if not result:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"ABEND record with tracking ID '{tracking_id}' not found"
+                detail=f"ABEND record with tracking ID '{tracking_id}' not found",
             )
-        
+
         return result
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error in get_abend_details API", tracking_id=tracking_id, error=str(e))
+        logger.error(
+            "Error in get_abend_details API", tracking_id=tracking_id, error=str(e)
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while retrieving ABEND details"
+            detail="Internal server error occurred while retrieving ABEND details",
         )
 
 
@@ -123,11 +122,11 @@ async def get_abend_details(
 )
 async def update_ai_remediation_approval(
     approval_request: AIRecommendationApprovalRequest,
-    tracking_id: str = Path(..., min_length=1, description="ABEND tracking ID")
+    tracking_id: str = Path(..., min_length=1, description="ABEND tracking ID"),
 ) -> AIRecommendationApprovalResponse:
     """
     Update AI remediation approval status and comments.
-    
+
     This endpoint allows users to:
     - Approve or reject AI-generated remediation recommendations
     - Add comments explaining the approval decision
@@ -135,29 +134,28 @@ async def update_ai_remediation_approval(
     """
     try:
         result = await abend_service.update_ai_remediation_approval(
-            tracking_id.strip(), 
-            approval_request
+            tracking_id.strip(), approval_request
         )
-        
+
         if not result:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"ABEND record with tracking ID '{tracking_id}' not found"
+                detail=f"ABEND record with tracking ID '{tracking_id}' not found",
             )
-        
+
         return result
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(
-            "Error in update_ai_remediation_approval API", 
-            tracking_id=tracking_id, 
-            error=str(e)
+            "Error in update_ai_remediation_approval API",
+            tracking_id=tracking_id,
+            error=str(e),
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while updating AI remediation approval"
+            detail="Internal server error occurred while updating AI remediation approval",
         )
 
 
@@ -173,23 +171,23 @@ async def update_ai_remediation_approval(
 async def get_available_filters() -> AvailableFiltersResponse:
     """
     Get available filter options for the UI.
-    
+
     Returns:
     - Available domain areas
     - ADR status options
     - Severity levels
-    
+
     This endpoint is used to populate filter dropdowns in the UI.
     """
     try:
         result = await abend_service.get_available_filters()
         return result
-        
+
     except Exception as e:
         logger.error("Error in get_available_filters API", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while retrieving available filters"
+            detail="Internal server error occurred while retrieving available filters",
         )
 
 
@@ -208,7 +206,7 @@ async def get_abend_logs(
 ) -> JobLogsResponse:
     """
     Get job logs from S3 using tracking ID.
-    
+
     This endpoint:
     - Retrieves the S3 path from the ABEND record's knowledge base metadata
     - Downloads and returns the job execution logs
@@ -216,22 +214,24 @@ async def get_abend_logs(
     """
     try:
         result = await abend_service.get_job_logs(tracking_id.strip())
-        
+
         if not result:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Job logs for tracking ID '{tracking_id}' not found"
+                detail=f"Job logs for tracking ID '{tracking_id}' not found",
             )
-        
+
         return result
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error in get_abend_logs API", tracking_id=tracking_id, error=str(e))
+        logger.error(
+            "Error in get_abend_logs API", tracking_id=tracking_id, error=str(e)
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while retrieving job logs"
+            detail="Internal server error occurred while retrieving job logs",
         )
 
 
@@ -247,24 +247,24 @@ async def get_abend_logs(
 async def get_today_stats() -> TodayStatsResponse:
     """
     Get today's ABEND statistics.
-    
+
     Returns aggregated counts for:
     - Active abends requiring attention
     - Abends requiring manual intervention
     - Resolved abends
     - Total abends for the day
-    
+
     This endpoint supports dashboard widgets and summary views.
     """
     try:
         result = await abend_service.get_today_stats()
         return result
-        
+
     except Exception as e:
         logger.error("Error in get_today_stats API", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while retrieving today's statistics"
+            detail="Internal server error occurred while retrieving today's statistics",
         )
 
 
@@ -281,25 +281,27 @@ async def get_job_history_trends(
 ) -> Dict[str, Any]:
     """
     Get job history trends for analytics and trending views.
-    
+
     Returns:
     - 30-day trend data for ABEND occurrences
     - Resolved vs. active counts over time
     - Aggregated statistics for the time period
-    
+
     This endpoint supports analytical dashboards and trend visualization.
     """
     try:
         result = await abend_service.get_job_history_trends(job_name.strip())
         return result
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error in get_job_history_trends API", job_name=job_name, error=str(e))
+        logger.error(
+            "Error in get_job_history_trends API", job_name=job_name, error=str(e)
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while retrieving job history trends"
+            detail="Internal server error occurred while retrieving job history trends",
         )
 
 
@@ -319,24 +321,24 @@ async def get_audit_logs_for_tracking_id(
 ) -> GetAuditLogsResponse:
     """
     Get all audit logs for a specific ABEND tracking ID.
-    
+
     This endpoint retrieves the complete audit trail for an ABEND record, showing:
     - State transitions and status changes
     - System actions and interventions
     - Error conditions and resolutions
     - Chronological order of events
-    
+
     Args:
         tracking_id: The ABEND tracking ID (e.g., "ABEND_JOBNAME_01K1T5TP0RX6...")
-    
+
     Returns:
         GetAuditLogsResponse: Complete audit trail with metadata
-        
+
     Raises:
         400: Invalid tracking ID format
         404: Tracking ID not found or no audit logs exist
         500: Internal server error
-    
+
     Example:
         GET /ui-api/v1alpha1/abends/ABEND_CLAIMS_01K1T5TP0RX6.../audit-logs
     """
@@ -345,44 +347,50 @@ async def get_audit_logs_for_tracking_id(
         if not tracking_id.strip():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Tracking ID cannot be empty"
+                detail="Tracking ID cannot be empty",
             )
-        
+
         # Clean and validate tracking ID
         tracking_id = tracking_id.strip()
         if len(tracking_id) < 10:  # Basic validation - should be longer
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid tracking ID format"
+                detail="Invalid tracking ID format",
             )
-        
+
         logger.info("Getting audit logs via UI API", tracking_id=tracking_id)
-        
+
         # Get audit logs via service layer
         result = await abend_service.get_audit_logs(tracking_id)
-        
+
         # Check if any audit logs were found
         if not result.audit_logs:
-            logger.warning("No audit logs found for tracking ID", tracking_id=tracking_id)
+            logger.warning(
+                "No audit logs found for tracking ID", tracking_id=tracking_id
+            )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No audit logs found for tracking ID: {tracking_id}"
+                detail=f"No audit logs found for tracking ID: {tracking_id}",
             )
-        
-        logger.info("Successfully retrieved audit logs via UI API", 
-                   tracking_id=tracking_id,
-                   count=len(result.audit_logs))
-        
+
+        logger.info(
+            "Successfully retrieved audit logs via UI API",
+            tracking_id=tracking_id,
+            count=len(result.audit_logs),
+        )
+
         return result
-        
+
     except HTTPException:
         # Re-raise HTTP exceptions (400, 404, etc.)
         raise
     except Exception as e:
-        logger.error("Error in get_audit_logs_for_tracking_id API", 
-                    tracking_id=tracking_id, 
-                    error=str(e))
+        logger.error(
+            "Error in get_audit_logs_for_tracking_id API",
+            tracking_id=tracking_id,
+            error=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while retrieving audit logs"
+            detail="Internal server error occurred while retrieving audit logs",
         )
