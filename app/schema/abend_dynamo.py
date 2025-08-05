@@ -130,7 +130,7 @@ class AbendDynamoTable(Model):
     """
     
     class Meta:
-        table_name = f"{DynamoDBConfig.get_table_name_prefix()}abend-records-optimized"
+        table_name = f"{DynamoDBConfig.get_table_name_prefix()}abend-test-dynamodb-dev"
         region = DynamoDBConfig.get_connection_kwargs()["region"]
         
         # Apply connection configuration for local DynamoDB
