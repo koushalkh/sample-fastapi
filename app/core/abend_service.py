@@ -4,6 +4,7 @@ Contains all business operations for ABEND records management.
 Delegates data access to the DAL layer.
 """
 
+import asyncio
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
@@ -31,6 +32,8 @@ from app.models.abend import (
     TodayStatsResponse,
 )
 from app.utils.pagination import encode_cursor
+from app.utils.gitlab import create_gitlab_client_from_settings
+from app.core.config import settings
 
 logger = get_logger(__name__)
 
@@ -114,10 +117,9 @@ class AbendService:
         """
         Create a new ABEND record via internal API.
         Generates unique tracking ID and initializes with ABEND_REGISTERED status.
-        Creates an audit log entry for tracking the ABEND creation.
+        Creates initial audit log and triggers log extraction pipeline asynchronously.
         """
         try:
-
             self.logger.info(
                 "Creating new ABEND record",
                 job_name=request.job_name,
@@ -125,7 +127,7 @@ class AbendService:
                 incident_id=request.incident_id,
             )
 
-            # Create ABEND record via DAL
+            # Step 1: Create ABEND record via DAL
             abend_details = abend_repository.create_abend(
                 job_name=request.job_name,
                 abended_at=request.abended_at,
@@ -135,7 +137,7 @@ class AbendService:
                 order_id=request.order_id,
             )
 
-            # Create audit log entry for ABEND creation (Option A: Synchronous)
+            # Step 2: Create initial audit log entry for ABEND creation
             try:
                 audit_request = CreateAuditLogRequest(
                     trackingID=abend_details.tracking_id,
@@ -149,7 +151,7 @@ class AbendService:
                 await self.create_audit_log(audit_request)
 
                 self.logger.info(
-                    "Audit log created for ABEND creation",
+                    "Initial audit log created for ABEND creation",
                     tracking_id=abend_details.tracking_id,
                     job_name=abend_details.job_name,
                 )
@@ -157,13 +159,27 @@ class AbendService:
             except Exception as audit_error:
                 # Log audit failure but don't fail the main ABEND creation
                 self.logger.warning(
-                    "Failed to create audit log for ABEND creation",
+                    "Failed to create initial audit log for ABEND creation",
                     tracking_id=abend_details.tracking_id,
                     job_name=abend_details.job_name,
                     audit_error=str(audit_error),
                 )
 
-            # Return success response
+            # Step 3: Trigger log extraction pipeline asynchronously (non-blocking) if enabled
+            if settings.trigger_log_extractor:
+                asyncio.create_task(
+                    self.trigger_log_extractor(abend_details, request)
+                )
+            else:
+                self.logger.info(
+                    "Log extraction pipeline trigger disabled",
+                    tracking_id=abend_details.tracking_id,
+                    trigger_enabled=settings.trigger_log_extractor
+                )
+
+            # Step 4: Return immediate success response
+            message_suffix = "Log extraction pipeline will be triggered automatically." if settings.trigger_log_extractor else "Log extraction pipeline trigger is disabled."
+            
             return CreateAbendResponse(
                 trackingID=abend_details.tracking_id,
                 jobName=abend_details.job_name,
@@ -171,7 +187,7 @@ class AbendService:
                 severity=abend_details.severity,
                 abendedAt=abend_details.abended_at,
                 createdAt=abend_details.created_at,
-                message=f"ABEND record created successfully with tracking ID: {abend_details.tracking_id}",
+                message=f"ABEND record created successfully with tracking ID: {abend_details.tracking_id}. {message_suffix}",
             )
 
         except Exception as e:
@@ -179,6 +195,181 @@ class AbendService:
                 "Error creating ABEND record", job_name=request.job_name, error=str(e)
             )
             raise
+
+    async def trigger_log_extractor(
+        self, abend_details: AbendDetailsModel, request: CreateAbendRequest
+    ) -> None:
+        """
+        Trigger GitLab pipeline for log extraction and update ABEND record accordingly.
+        This function runs asynchronously and handles both success and failure scenarios.
+        
+        Args:
+            abend_details: ABEND record details
+            request: Original ABEND creation request
+        """
+        gitlab_success = False
+        pipeline_run_id = None
+        updated_adr_status = abend_details.adr_status  # Default to current status
+        
+        try:
+            self.logger.info(
+                "Starting log extraction pipeline trigger",
+                tracking_id=abend_details.tracking_id,
+                job_name=abend_details.job_name,
+            )
+            
+            # Get GitLab project ID from configuration
+            project_id = settings.gitlab_project_id
+            
+            if not project_id:
+                raise ValueError("GitLab project ID not configured")
+
+            # Create GitLab client using settings properties
+            gitlab_client = await create_gitlab_client_from_settings()
+            
+            # Trigger pipeline with ABEND context variables
+            pipeline_info = await gitlab_client.trigger_pipeline(
+                project_id=project_id,
+                variables={
+                    "TRACKING_ID": abend_details.tracking_id,
+                    "JOB_NAME": abend_details.job_name,
+                    "SEVERITY": abend_details.severity,
+                    "INCIDENT_ID": request.incident_id,
+                    "ABENDED_AT": abend_details.abended_at.isoformat() if abend_details.abended_at else "",
+                }
+            )
+            
+            # Extract pipeline run ID from response
+            pipeline_run_id = str(pipeline_info.get('id', ''))
+            gitlab_success = True
+            updated_adr_status = ADRStatusEnum.LOG_EXTRACTION_INITIATED.value
+            
+            self.logger.info(
+                "GitLab pipeline triggered successfully",
+                tracking_id=abend_details.tracking_id,
+                pipeline_id=pipeline_run_id,
+                pipeline_url=pipeline_info.get('web_url', ''),
+                project_id=project_id
+            )
+            
+            # Update ABEND record with pipeline run ID and new status
+            success = abend_repository.update_abend_fields(
+                tracking_id=abend_details.tracking_id,
+                updates={
+                    "log_extraction_run_id": pipeline_run_id,
+                    "adr_status": updated_adr_status,
+                    "updated_at": datetime.now(timezone.utc),
+                    "updated_by": "system"
+                }
+            )
+            
+            if not success:
+                self.logger.warning(
+                    "Failed to update ABEND record with pipeline information",
+                    tracking_id=abend_details.tracking_id,
+                    pipeline_id=pipeline_run_id
+                )
+            
+            # Create success audit log
+            try:
+                success_audit_request = CreateAuditLogRequest(
+                    trackingID=abend_details.tracking_id,
+                    level=AuditLevelEnum.INFO,
+                    adrStatus=ADRStatusEnum.LOG_EXTRACTION_INITIATED,
+                    message="GitLab pipeline triggered successfully",
+                    description=f"Log extraction pipeline started successfully. Pipeline ID: {pipeline_run_id}, URL: {pipeline_info.get('web_url', 'N/A')}, Project ID: {project_id}",
+                    createdBy="system"
+                )
+                
+                await self.create_audit_log(success_audit_request)
+                
+                self.logger.info(
+                    "Success audit log created for GitLab pipeline trigger",
+                    tracking_id=abend_details.tracking_id,
+                    pipeline_id=pipeline_run_id
+                )
+                
+            except Exception as success_audit_error:
+                self.logger.warning(
+                    "Failed to create success audit log for GitLab pipeline trigger",
+                    tracking_id=abend_details.tracking_id,
+                    pipeline_id=pipeline_run_id,
+                    audit_error=str(success_audit_error)
+                )
+            
+            # Clean up GitLab client
+            await gitlab_client.close()
+            
+        except Exception as gitlab_error:
+            gitlab_success = False
+            updated_adr_status = ADRStatusEnum.MANUAL_INTERVENTION_REQUIRED.value
+            
+            self.logger.error(
+                "GitLab pipeline trigger failed",
+                tracking_id=abend_details.tracking_id,
+                job_name=abend_details.job_name,
+                error=str(gitlab_error),
+                error_type=type(gitlab_error).__name__
+            )
+            
+            # Update ABEND record status to indicate manual intervention required
+            try:
+                success = abend_repository.update_abend_fields(
+                    tracking_id=abend_details.tracking_id,
+                    updates={
+                        "adr_status": updated_adr_status,
+                        "updated_at": datetime.now(timezone.utc),
+                        "updated_by": "system"
+                    }
+                )
+                
+                if not success:
+                    self.logger.warning(
+                        "Failed to update ABEND record status after GitLab failure",
+                        tracking_id=abend_details.tracking_id
+                    )
+                    
+            except Exception as update_error:
+                self.logger.error(
+                    "Error updating ABEND record after GitLab failure",
+                    tracking_id=abend_details.tracking_id,
+                    update_error=str(update_error)
+                )
+            
+            # Create failure audit log
+            try:
+                failure_audit_request = CreateAuditLogRequest(
+                    trackingID=abend_details.tracking_id,
+                    level=AuditLevelEnum.ERROR,
+                    adrStatus=ADRStatusEnum.MANUAL_INTERVENTION_REQUIRED,
+                    message="GitLab pipeline trigger failed",
+                    description=f"Failed to trigger log extraction pipeline. Error: {str(gitlab_error)}. Manual intervention required to start log extraction process.",
+                    createdBy="system"
+                )
+                
+                await self.create_audit_log(failure_audit_request)
+                
+                self.logger.info(
+                    "Failure audit log created for GitLab pipeline trigger",
+                    tracking_id=abend_details.tracking_id
+                )
+                
+            except Exception as failure_audit_error:
+                self.logger.warning(
+                    "Failed to create failure audit log for GitLab pipeline trigger",
+                    tracking_id=abend_details.tracking_id,
+                    audit_error=str(failure_audit_error)
+                )
+
+        finally:
+            # Log completion of log extraction trigger attempt
+            self.logger.info(
+                "Log extraction pipeline trigger completed",
+                tracking_id=abend_details.tracking_id,
+                gitlab_success=gitlab_success,
+                pipeline_run_id=pipeline_run_id,
+                final_status=updated_adr_status
+            )
 
     async def update_ai_remediation_approval(
         self, tracking_id: str, approval_request: AIRecommendationApprovalRequest

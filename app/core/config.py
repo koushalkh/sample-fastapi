@@ -205,6 +205,31 @@ class Settings:
         """Get GitLab SSL verification setting. False for local env, True for others."""
         return not self.is_local_env
 
+    @property
+    def gitlab_url(self) -> str:
+        """Get GitLab URL."""
+        return self.gitlab_config.get("ADR-GitlabUrl", "")
+
+    @property
+    def gitlab_token(self) -> str:
+        """Get GitLab token."""
+        return self.gitlab_config.get("ADR-GitlabToken", "")
+
+    @property
+    def gitlab_branch_name(self) -> str:
+        """Get GitLab branch name."""
+        return self.gitlab_config.get("ADR-GitlabBranchName", "main")
+
+    @property
+    def gitlab_project_id(self) -> str:
+        """Get GitLab project ID."""
+        return self.gitlab_config.get("ADR-GitlabProjectId", "")
+
+    @property
+    def trigger_log_extractor(self) -> bool:
+        """Get trigger log extractor setting. Controls whether GitLab pipeline should be triggered."""
+        return not self.is_local_env
+
     def set_gitlab_config(self, config: Dict[str, Any]) -> None:
         """Set GitLab configuration."""
         self._gitlab_config = config
@@ -275,6 +300,7 @@ def _load_from_environment(settings: Settings) -> None:
             "ADR-GitlabUrl": os.getenv("ADR_GITLAB_URL", ""),
             "ADR-GitlabToken": os.getenv("ADR_GITLAB_TOKEN", ""),
             "ADR-GitlabBranchName": os.getenv("ADR_GITLAB_BRANCH_NAME", "main"),
+            "ADR-GitlabProjectId": os.getenv("ADR_GITLAB_PROJECT_ID", ""),
         }
     )
 
@@ -334,6 +360,7 @@ def _load_from_secrets_manager(settings: Settings) -> None:
             "ADR-GitlabUrl": "ADR_GITLAB_URL",
             "ADR-GitlabToken": "ADR_GITLAB_TOKEN",
             "ADR-GitlabBranchName": "ADR_GITLAB_BRANCH_NAME",
+            "ADR-GitlabProjectId": "ADR_GITLAB_PROJECT_ID",
         },
         config_name="GitLab",
         defaults={"ADR-GitlabBranchName": "main"},

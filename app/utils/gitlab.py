@@ -235,3 +235,21 @@ async def create_gitlab_client(config: Dict[str, Any], ssl_verify: bool = True) 
         GitLab client instance
     """
     return GitLabClient(config, ssl_verify)
+
+
+async def create_gitlab_client_from_settings() -> GitLabClient:
+    """
+    Factory function to create GitLab client from settings properties
+    
+    Returns:
+        GitLab client instance configured from settings
+    """
+    from app.core.config import settings
+    
+    config = {
+        "ADR-GitlabUrl": settings.gitlab_url,
+        "ADR-GitlabToken": settings.gitlab_token,
+        "ADR-GitlabBranchName": settings.gitlab_branch_name,
+    }
+    
+    return GitLabClient(config, settings.gitlab_ssl_verify)
