@@ -200,6 +200,11 @@ class Settings:
             self._gitlab_config = {}
         return self._gitlab_config
 
+    @property
+    def gitlab_ssl_verify(self) -> bool:
+        """Get GitLab SSL verification setting. False for local env, True for others."""
+        return not self.is_local_env
+
     def set_gitlab_config(self, config: Dict[str, Any]) -> None:
         """Set GitLab configuration."""
         self._gitlab_config = config
