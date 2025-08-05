@@ -84,6 +84,10 @@ Documentation = "TODO"
 [project.scripts]
 adr-service = "app.main:app"
 
+# Hatchling build configuration
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
 # Development and code quality scripts
 [tool.scripts]
 # Basic formatting and linting
