@@ -48,6 +48,8 @@ class AbendedDateIndex(GlobalSecondaryIndex):
 
     class Meta:
         index_name = f"{DynamoDBConfig.get_index_name_prefix()}AbendedDateIndex-gsi01{DynamoDBConfig.get_index_name_suffix()}"
+        read_capacity_units = 100
+        write_capacity_units = 50
         projection = AllProjection()
 
     # Hash key: Date in YYYY-MM-DD format for partition isolation
@@ -73,7 +75,8 @@ class JobHistoryIndex(GlobalSecondaryIndex):
 
     class Meta:
         index_name = f"{DynamoDBConfig.get_index_name_prefix()}JobHistoryIndex-gsi02{DynamoDBConfig.get_index_name_suffix()}"
-
+        read_capacity_units = 100
+        write_capacity_units = 50
         projection = AllProjection()
 
     # Hash key: Job Name for grouping job failures
@@ -99,6 +102,8 @@ class AuditLogsIndex(GlobalSecondaryIndex):
 
     class Meta:
         index_name = f"{DynamoDBConfig.get_index_name_prefix()}AuditLogsIndex-gsi03{DynamoDBConfig.get_index_name_suffix()}"
+        read_capacity_units = 100
+        write_capacity_units = 50
 
         projection = AllProjection()
 

@@ -48,7 +48,8 @@ class JobNameIndex(GlobalSecondaryIndex):
 
     class Meta:
         index_name = f"{DynamoDBConfig.get_index_name_prefix()}JobNameIndex{DynamoDBConfig.get_index_name_suffix()}"
-
+        read_capacity_units = 100
+        write_capacity_units = 50
         projection = AllProjection()
 
     # Hash key: Job name for partition isolation
@@ -74,7 +75,8 @@ class AbendTypeIndex(GlobalSecondaryIndex):
 
     class Meta:
         index_name = f"{DynamoDBConfig.get_index_name_prefix()}AbendTypeIndex{DynamoDBConfig.get_index_name_suffix()}"
-
+        read_capacity_units = 100
+        write_capacity_units = 50
         projection = AllProjection()
 
     # Hash key: Abend type for partition isolation
