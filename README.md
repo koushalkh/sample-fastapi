@@ -1,6 +1,6 @@
-# ADR (Abnormal End Records) FastAPI Microservice
+# ADR FastAPI Microservice
 
-A production-ready FastAPI microservice for managing ABEND (Abnormal End) records and SOPs (Standard Operating Procedures) with modular architecture, structured logging, and flexible deployment options.
+A production-ready FastAPI microservice for managing ABEND  records and SOPs (Standard Operating Procedures) with modular architecture, structured logging, and flexible deployment options.
 
 ## Features
 
@@ -99,6 +99,26 @@ sample/
 
 ## Configuration
 
+### Environment Setup
+
+The application uses environment-specific configuration files. Templates are provided for easy setup:
+
+```bash
+# Quick setup for development
+./scripts/setup-env.sh setup-dev
+
+# Quick setup for production  
+./scripts/setup-env.sh setup-prod
+
+# Manual setup
+cp .env.dev.template .env.dev     # Edit with your values
+cp .env.prod.template .env.prod   # Edit with your values
+```
+
+See [ENVIRONMENT_README.md](ENVIRONMENT_README.md) for detailed configuration guide.
+
+### Configuration Management
+
 All application configuration is centralized in `app/core/config.py`:
 
 - **Environment Detection**: Automatic dev/prod environment detection via `POD_NAMESPACE`
@@ -124,6 +144,20 @@ class Settings:
     def port(self):                          # Service port
         return 8000
 ```
+
+### Environment Variables
+
+Key environment variables supported:
+
+| Variable | Development | Production | Description |
+|----------|-------------|------------|-------------|
+| `APP_NAME` | BAM | BAM | Application identifier |
+| `ENVIRONMENT` | development | production | Runtime environment |
+| `DEBUG` | true | false | Debug mode |
+| `AWS_REGION` | us-east-1 | us-east-1 | AWS region |
+| `DYNAMODB_ENDPOINT` | http://localhost:4566 | (empty) | Local DynamoDB |
+| `S3_ENDPOINT` | http://localhost:4566 | (empty) | Local S3 |
+| `LOG_LEVEL` | DEBUG | INFO | Logging level |
 
 ## API Documentation
 
