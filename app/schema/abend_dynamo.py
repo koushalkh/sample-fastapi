@@ -47,10 +47,8 @@ class AbendedDateIndex(GlobalSecondaryIndex):
     """
 
     class Meta:
-        index_name = "AbendedDateIndex"
+        index_name = f"{DynamoDBConfig.get_index_name_prefix()}AbendedDateIndex-gsi01{DynamoDBConfig.get_index_name_suffix()}"
         projection = AllProjection()
-        read_capacity_units = 2
-        write_capacity_units = 2
 
     # Hash key: Date in YYYY-MM-DD format for partition isolation
     abended_date = UnicodeAttribute(hash_key=True)
@@ -74,10 +72,9 @@ class JobHistoryIndex(GlobalSecondaryIndex):
     """
 
     class Meta:
-        index_name = "JobHistoryIndex"
+        index_name = f"{DynamoDBConfig.get_index_name_prefix()}JobHistoryIndex-gsi02{DynamoDBConfig.get_index_name_suffix()}"
+
         projection = AllProjection()
-        read_capacity_units = 2
-        write_capacity_units = 2
 
     # Hash key: Job Name for grouping job failures
     job_name = UnicodeAttribute(hash_key=True, attr_name="jobName")
@@ -101,10 +98,9 @@ class AuditLogsIndex(GlobalSecondaryIndex):
     """
 
     class Meta:
-        index_name = "AuditLogsIndex"
+        index_name = f"{DynamoDBConfig.get_index_name_prefix()}AuditLogsIndex-gsi03{DynamoDBConfig.get_index_name_suffix()}"
+
         projection = AllProjection()
-        read_capacity_units = 1
-        write_capacity_units = 1
 
     # Hash key: tracking_id for grouping audit logs
     tracking_id = UnicodeAttribute(hash_key=True, attr_name="trackingID")
@@ -130,7 +126,7 @@ class AbendDynamoTable(Model):
     """
 
     class Meta:
-        table_name = f"{DynamoDBConfig.get_table_name_prefix()}abend-test-dynamodb-dev"
+        table_name = f"{DynamoDBConfig.get_table_name_prefix()}abend-test{DynamoDBConfig.get_table_name_suffix()}"
         region = DynamoDBConfig.get_connection_kwargs()["region"]
 
         # Apply connection configuration for local DynamoDB

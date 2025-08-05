@@ -16,11 +16,10 @@ class Settings:
     def __init__(self) -> None:
         self.logger = get_logger(__name__)
         self.app_name = os.getenv("APP_NAME", "BAM")
-        self.environment = os.getenv("ENVIRONMENT", "dev")
         self.debug = os.getenv("DEBUG", "false").lower() == "true"
 
         # ADR Environment Configuration
-        self.adr_env = os.getenv("ADR_ENV", "Local")
+        self.adr_env = os.getenv("ENV", "Local")
 
         # AWS Configuration
         self.aws_region = os.getenv("AWS_REGION", "us-east-1")

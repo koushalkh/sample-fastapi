@@ -40,6 +40,27 @@ class DynamoDBConfig:
         return f"{app_name}-"
 
     @staticmethod
+    def get_table_name_suffix() -> str:
+        """Get table name suffix based on environment."""
+        env = settings.adr_env
+        # Remove dev-specific naming, use consistent naming
+        return f"-{env}"
+
+    @staticmethod
+    def get_index_name_prefix() -> str:
+        """Get index name prefix based on environment."""
+        app_name = settings.APP_NAME
+        # Remove dev-specific naming, use consistent naming
+        return f"{app_name}-"
+
+    @staticmethod
+    def get_index_name_suffix() -> str:
+        """Get index name suffix based on environment."""
+        env = settings.adr_env
+        # Remove dev-specific naming, use consistent naming
+        return f"-{env}"
+
+    @staticmethod
     def create_connection() -> Connection:
         """Create a PynamoDB connection with proper configuration."""
         return Connection(**DynamoDBConfig.get_connection_kwargs())

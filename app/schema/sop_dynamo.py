@@ -47,10 +47,9 @@ class JobNameIndex(GlobalSecondaryIndex):
     """
 
     class Meta:
-        index_name = "JobNameIndex"
+        index_name = f"{DynamoDBConfig.get_index_name_prefix()}JobNameIndex{DynamoDBConfig.get_index_name_suffix()}"
+
         projection = AllProjection()
-        read_capacity_units = 2
-        write_capacity_units = 2
 
     # Hash key: Job name for partition isolation
     job_name = UnicodeAttribute(hash_key=True)
@@ -74,10 +73,9 @@ class AbendTypeIndex(GlobalSecondaryIndex):
     """
 
     class Meta:
-        index_name = "AbendTypeIndex"
+        index_name = f"{DynamoDBConfig.get_index_name_prefix()}AbendTypeIndex{DynamoDBConfig.get_index_name_suffix()}"
+
         projection = AllProjection()
-        read_capacity_units = 2
-        write_capacity_units = 2
 
     # Hash key: Abend type for partition isolation
     abend_type = UnicodeAttribute(hash_key=True)
@@ -103,7 +101,8 @@ class SOPDynamoTable(Model):
     """
 
     class Meta:
-        table_name = f"{DynamoDBConfig.get_table_name_prefix()}sop-records"
+        table_name = f"{DynamoDBConfig.get_table_name_prefix()}sop-records{DynamoDBConfig.get_table_name_suffix()}"
+
         region = DynamoDBConfig.get_connection_kwargs()["region"]
 
         # Apply connection configuration for local DynamoDB
