@@ -37,7 +37,8 @@ def create_app() -> FastAPI:
     setup_request_logging_middleware(app)
     
     # 3. Security headers
-    setup_security_headers_middleware(app, add_csp=True)
+    if not settings.is_local_env:
+        setup_security_headers_middleware(app, add_csp=True)
     
     # 4. CORS (should be after security headers)
     setup_cors_middleware(app, cors_origins_config=settings.cors_origins)

@@ -13,6 +13,9 @@ from .abend_repository import (
     get_stats_for_date
 )
 
+# Import SOP repository functions
+from . import sop_repository
+
 __all__ = [
     "get_abend_by_tracking_id",
     "get_abends_for_date",
@@ -21,5 +24,6 @@ __all__ = [
     "get_job_history",
     "get_abends_unified",
     "update_abend_fields",
-    "get_stats_for_date"
+    "get_stats_for_date",
+    "sop_repository"
 ]

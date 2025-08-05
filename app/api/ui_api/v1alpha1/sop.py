@@ -1,47 +1,71 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from starlette import status
+from structlog import get_logger
 
 from app.api import tags
 from app.models.generic_responses import GenericResponse
-from app.models.sop import SOPDetail
+from app.models.sop import (
+    GetSOPsFilter,
+    GetSOPsResponse,
+    SOPDetailsResponse
+)
+from app.core.sop_service import sop_service
 
 # Create the router
 router = APIRouter()
+logger = get_logger(__name__)
+
+
+@router.get(
+    "/",
+    summary="Get SOP records for UI",
+    description="Retrieve SOP records with pagination, filtering, and search capabilities for UI display.",
+    response_model=GetSOPsResponse,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"model": GenericResponse},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": GenericResponse}
+    },
+    tags=[tags.UI_SOP_V1ALPHA1.display_name],
+)
+async def get_sops_for_ui(filters: GetSOPsFilter = Depends()) -> GetSOPsResponse:
+    """
+    Get SOP records with filtering and pagination for UI display
+    """
+    try:
+        return await sop_service.get_sops(filters)
+    except Exception as e:
+        logger.error("Failed to get SOPs for UI", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve SOP records"
+        )
 
 
 @router.get(
     "/{sop_id}",
     summary="Get SOP details for UI",
     description="Get detailed information about a specific SOP for UI display.",
-    response_model=SOPDetail,
+    response_model=SOPDetailsResponse,
     responses={status.HTTP_404_NOT_FOUND: {"model": GenericResponse}},
     tags=[tags.UI_SOP_V1ALPHA1.display_name],
 )
-async def get_sop_for_ui(sop_id: str) -> SOPDetail:
+async def get_sop_for_ui(sop_id: str) -> SOPDetailsResponse:
     """
     Get detailed SOP information for UI display
     """
-    # This is just example data
-    if sop_id == "1":
-        return SOPDetail(
-            id="1",
-            name="SOP-001",
-            description="Example SOP 1",
-            version="1.0",
-            content="This is the detailed content of SOP-001",
-            last_updated="2025-07-01T12:00:00Z",
-        )
-    elif sop_id == "2":
-        return SOPDetail(
-            id="2",
-            name="SOP-002",
-            description="Example SOP 2",
-            version="1.0",
-            content="This is the detailed content of SOP-002",
-            last_updated="2025-07-05T14:30:00Z",
-        )
-    else:
+    try:
+        sop_details = await sop_service.get_sop_details(sop_id)
+        if not sop_details:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"SOP record with ID '{sop_id}' not found"
+            )
+        return sop_details
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to get SOP details for UI", sop_id=sop_id, error=str(e))
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"SOP with ID {sop_id} not found",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve SOP details"
         )
