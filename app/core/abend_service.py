@@ -256,16 +256,7 @@ class AbendService:
         Returns hardcoded values for dropdown population.
         """
         return AvailableFiltersResponse(
-            domainAreas=[
-                "Finance",
-                "HR",
-                "Operations",
-                "IT",
-                "Customer Service",
-                "Supply Chain",
-                "Marketing",
-                "Compliance",
-            ],
+            domainAreas=[],
             adrStatuses=[status.value for status in ADRStatusEnum],
             severities=[severity.value for severity in SeverityEnum],
         )
